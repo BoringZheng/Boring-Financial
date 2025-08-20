@@ -14,7 +14,7 @@
               "type": "markdown",
               "state": {
                 "file": "README.md",
-                "mode": "preview",
+                "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
@@ -169,5 +169,7 @@
     }
   },
   "active": "3391e45af14e3e38",
-  "lastOpenFiles": []
+  "lastOpenFiles": [
+    "Pasted image 20250821010820.png"
+  ]
 }
