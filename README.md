@@ -1,12 +1,12 @@
 Hello! Welcome to Boring's Financial. This is a project aiming to give you a method to manage your money. 
 
-This project could show you how much you spend on your own categories and how much you spend in total every month or any time you like(you can change the code to do that).
+This project could show you how much you spend on all kinds of categories and how much you spend in total every month or any time you like(you can change the code to do that).
 
 In fact, you have two options to deploy the project. Both methods need your wechat bills and Alipay bills.
 
 ## To get your Bills
 
-### 1. To get Wechat bills
+### 1. To get  Wechat bills
 
 Wechat -> 我的 -> 服务 -> 钱包 -> 账单 -> 右上角 -> 下载账单 -> 用于个人对账
 
@@ -14,7 +14,7 @@ Wechat -> 我的 -> 服务 -> 钱包 -> 账单 -> 右上角 -> 下载账单 -> �
 
 Alipay -> 我的 -> 账单-> 右上角 -> 开具交易流水证明 -> 用于个人对账
 
-Notice that, you should delete the redundant parts in the chart. Make sure the first line of the chart should be like this:
+**Notice that**, you should delete the redundant parts in the chart. Make sure the first line of the chart should be like this:
 
 ![image.png](https://boring-picture1.oss-cn-hangzhou.aliyuncs.com/20250821012109188.png)
 
@@ -23,9 +23,9 @@ Notice that, you should delete the redundant parts in the chart. Make sure the f
 
 ### 1. Via Obsidian
 
-To use this project, you need obsidian, file sync(or you can copy the file every time) on your computer.
+To use this project, you need obsidian, file sync(or you can copy the file every time) on your computer. This method is designed for those who have some code skills to make their own vision page. If you just want a basic pdf report, move to the second deploy method.
 
-First, you should download your wechat or alipay bills in folder input. And notice that, you should delete the head in the xlsx or csv, the table's first row should be 交易时间 etc.
+First, you should download your Wechat or Alipay bills in folder input. And notice that, you should delete the head in the xlsx or csv, the table's first row should be 交易时间 etc.
 
 Then, you could open category_map.csv in your vscode and change your own category. Notice that, don't open it with wps or microsoft office.
 
@@ -178,4 +178,8 @@ for(const m of months){
 
 ### 2. Deploy it as a software
 
-In this way, you should download the newest release, and put your own bills in folder input. Then you could just click the .exe file to get your financial report.
+In this way, you should download the newest release, and put your own bills in input folder. Then you could just click the .exe file to get your financial report.
+
+
+
+In the end, if you have any question using this project, contact us by Boring__Zheng@163.com.
