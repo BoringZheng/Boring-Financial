@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+
+# Build artifacts
+/dist/
+/build/
+/*.spec
+*.exe
+
+# App data
+/output/
+/input/*
+
+# keep folders
+!input/.gitkeep
+!output/.gitkeep
