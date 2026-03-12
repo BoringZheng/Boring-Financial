@@ -19,14 +19,22 @@ class ReportBuilder:
 
     def _resolve_unicode_font(self) -> tuple[str, Path]:
         candidates = [
+            ("MicrosoftYaHei", settings.repo_root / "fonts" / "msyh.ttf"),
             ("MicrosoftYaHei", Path("C:/Windows/Fonts/msyh.ttc")),
             ("SimHei", Path("C:/Windows/Fonts/simhei.ttf")),
             ("SimSun", Path("C:/Windows/Fonts/simsun.ttc")),
+            ("NotoSansCJK", Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc")),
+            ("NotoSansCJK", Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.otf")),
+            ("WenQuanYiZenHei", Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc")),
+            ("WenQuanYiZenHei", Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttf")),
         ]
         for font_name, font_path in candidates:
             if font_path.exists():
                 return font_name, font_path
-        raise FileNotFoundError("No suitable Unicode font found for PDF report generation")
+        raise FileNotFoundError(
+            "No suitable Unicode font found for PDF report generation. "
+            "Install Noto CJK/WenQuanYi fonts or keep fonts/msyh.ttf in the repo."
+        )
 
     def _configure_pdf_font(self, pdf: FPDF) -> str:
         font_name, font_path = self._resolve_unicode_font()
