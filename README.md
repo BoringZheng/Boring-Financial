@@ -1,185 +1,125 @@
-Hello! Welcome to Boring's Financial. This is a project aiming to give you a method to manage your money. 
+﻿# Boring Financial
 
-This project could show you how much you spend on all kinds of categories and how much you spend in total every month or any time you like(you can change the code to do that).
+一个面向课程大作业的智能账单分类系统。项目将原始的 rule-based Python 脚本升级为前后端分离、多用户、可部署、可切换分类模型的软件系统，支持微信/支付宝账单导入、自动分类、人工校正、统计看板和 PDF 报表。
 
-In fact, you have two options to deploy the project. Both methods need your wechat bills and Alipay bills.
+## 项目目标
 
-## To get your Bills
+- 将旧版脚本重构为符合软件工程规范的 monorepo
+- 使用大模型 API 替代纯规则分类，并保留规则兜底
+- 支持后续切换到自部署开源模型服务
+- 为课程答辩提供完整的架构、接口、测试和部署材料
 
-### 1. To get  Wechat bills
+## 核心功能
 
-Wechat -> 我的 -> 服务 -> 钱包 -> 账单 -> 右上角 -> 下载账单 -> 用于个人对账
+- 多用户注册、登录与账单隔离
+- 微信/支付宝账单文件导入与统一解析
+- 规则分类 + 大模型分类 + 分类缓存的混合分类链路
+- 分类校正工作台与用户自定义分类
+- Dashboard 统计、Top 商户、大额支出、导入任务状态
+- PDF 报表导出
+- OpenAI-compatible provider 切换到本地模型服务
 
-### 2. To get Alipay bills
+## 系统架构
 
-Alipay -> 我的 -> 账单-> 右上角 -> 开具交易流水证明 -> 用于个人对账
-
-**Notice that**, you should delete the redundant parts in the chart. Make sure the first line of the chart should be like this:
-
-![image.png](https://boring-picture1.oss-cn-hangzhou.aliyuncs.com/20250821012109188.png)
-
-
-## To deploy the project
-
-### 1. Via Obsidian
-
-To use this project, you need obsidian, file sync(or you can copy the file every time) on your computer. This method is designed for those who have some code skills to make their own vision page. If you just want a basic pdf report, move to the second deploy method.
-
-First, you should download your Wechat or Alipay bills in folder input. And notice that, you should delete the head in the xlsx or csv, the table's first row should be 交易时间 etc.
-
-Then, you could open category_map.csv in your vscode and change your own category. Notice that, don't open it with wps or microsoft office.
-
-And then you could run merge_bills.py, and then sync folder output and your obsidian volt folder.
-
-In your obsidian folder, you should download and enable the community plugins dataviewer, and allow jvavscript query.
-
-Last, make a new md file like this:
-
-
-```dataviewjs
-
-/***** ===== 配置区 ===== *****/
-const CSV_PATH = "merged.csv";   // ← 改成你的 CSV 路径
-const CURRENCY = "¥";                 // 显示货币符号
-const MONTHS_BACK = 12;               // 本月起往前 N 个月（含本月）
-const TOP_MERCHANTS = 10;             // 每月 Top 商家数量（支出）
-const BIG_TOP = 10;                   // 每月大额支出显示条数
-const BIG_MIN = 0;                    // 大额支出最小金额门槛（例如 200)
-
-/***** ===== 工具函数 ===== *****/
-function splitCsvLine(l){
-  // 按逗号切分，忽略被双引号包裹的逗号
-  return l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(s=>s.replace(/^"|"$/g,"").trim());
-}
-function fmt(n){ return CURRENCY + (Math.round(n*100)/100).toFixed(2); }
-function ym(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; }
-function monthStart(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
-function monthEnd(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0, 23,59,59); }
-function sum(arr, sel){ return arr.reduce((a,x)=>a + (sel ? sel(x) : x), 0); }
-function groupSum(rows, keyFn, valFn){
-  const m = new Map();
-  for(const r of rows){
-    const k = keyFn(r);
-    m.set(k, (m.get(k)||0) + valFn(r));
-  }
-  return m;
-}
-
-/***** ===== 读取 CSV ===== *****/
-const raw = await dv.io.load(CSV_PATH);
-if (!raw){ dv.paragraph("未找到文件：" + CSV_PATH); return; }
-const lines = raw.trim().split(/\r?\n/);
-if (lines.length < 2){ dv.paragraph("CSV 为空"); return; }
-const header = lines[0].split(",").map(s=>s.trim());
-const idx = Object.fromEntries(header.map((h,i)=>[h,i]));
-
-// 解析为标准对象
-let rows = lines.slice(1).map(l=>{
-  const c = splitCsvLine(l);
-  const d = new Date(c[idx["date"]]);
-  return {
-    date: d,
-    month: isNaN(d) ? "" : ym(d),
-    type: (c[idx["type"]]||"").trim(),              // "支出"/"收入"
-    category: (c[idx["category"]]||"").trim() || "未分类",
-    subcategory: (c[idx["subcategory"]]||"").trim(),
-    amount: parseFloat(c[idx["amount"]]||"0") || 0,
-    platform: (c[idx["platform"]]||"").trim(),
-    merchant: (c[idx["merchant"]]||"").trim() || "（无商家）",
-    item: (c[idx["item"]]||"").trim(),
-    method: (c[idx["method"]]||"").trim(),
-    status: (c[idx["status"]]||"").trim(),
-    note: (c[idx["note"]]||"").trim()
-  };
-}).filter(r=>!isNaN(r.date));
-
-/***** ===== 生成月份列表：本月 → 往前 N-1 个月 ===== *****/
-const now = new Date();
-const months = [];
-for (let i = 0; i < MONTHS_BACK; i++){
-  const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
-  months.push(ym(d));
-}
-
-/***** ===== 按月渲染 ===== *****/
-dv.header(1, "年度财务总览（逐月）");
-
-for(const m of months){
-  const start = new Date(Number(m.slice(0,4)), Number(m.slice(5,7))-1, 1);
-  const end = monthEnd(start);
-
-  const rowsM = rows.filter(r => r.date >= start && r.date <= end);
-  const expM = rowsM.filter(r => r.type.includes("支出"));
-  const incM = rowsM.filter(r => r.type.includes("收入"));
-
-  const expTotal = sum(expM, r=>r.amount);
-  const incTotal = sum(incM, r=>r.amount);
-  const netTotal = incTotal - expTotal;
-
-  // 分类汇总（支出）
-  const catMap = groupSum(expM, r=>r.category, r=>r.amount);
-  const cats = Array.from(catMap.entries()).sort((a,b)=>b[1]-a[1]);
-
-  // Top 商家（支出）
-  const merMap = groupSum(expM, r=>r.merchant, r=>r.amount);
-  const merchants = Array.from(merMap.entries()).sort((a,b)=>b[1]-a[1]).slice(0, TOP_MERCHANTS);
-
-  // 大额支出（支出 Top N 或超过门槛）
-  let big = expM.slice()
-    .filter(r => r.amount >= BIG_MIN)
-    .sort((a,b)=>b.amount - a.amount)
-    .slice(0, BIG_TOP)
-    .map(r => [
-      r.date.toISOString().slice(0,10),
-      r.merchant,
-      r.item || r.note || "",
-      fmt(r.amount),
-      r.category
-    ]);
-
-  // —— 标题 + KPI
-  dv.header(2, `${m}`);
-  dv.table(["指标","金额"], [
-    ["支出", fmt(expTotal)],
-    ["收入", fmt(incTotal)],
-    ["净流", fmt(netTotal)]
-  ]);
-  
-
-  // —— 支出分类汇总
-  dv.header(3, "支出分类");
-  if (cats.length){
-    dv.table(["分类","金额"], cats.map(([k,v]) => [k, fmt(v)]));
-  }else{
-    dv.paragraph("_本月无支出数据_");
-  }
-
-  // —— Top 商家（支出）
-  dv.header(3, `Top 商家（支出，前 ${TOP_MERCHANTS}）`);
-  if (merchants.length){
-    dv.table(["商家","金额"], merchants.map(([k,v]) => [k, fmt(v)]));
-  }else{
-    dv.paragraph("_本月无支出商家_");
-  }
-
-  // —— 大额支出
-  dv.header(3, `大额支出（Top ${BIG_TOP}${BIG_MIN>0? "，门槛≥"+fmt(BIG_MIN):""}）`);
-  if (big.length){
-    dv.table(["日期","商家","摘要","金额","分类"], big);
-  }else{
-    dv.paragraph("_无大额支出_");
-  }
-
-  // 分隔线更清晰
-  dv.el("hr", "");
-}
+```mermaid
+flowchart LR
+    U["Vue 3 Frontend"] --> N["Nginx"]
+    N --> B["FastAPI Backend"]
+    B --> P["PostgreSQL"]
+    B --> R["Redis"]
+    B --> W["Celery Worker"]
+    W --> P
+    B --> A["OpenAI-Compatible API"]
+    B --> M["Local Model Service (vLLM)"]
 ```
 
+## 技术栈
 
-### 2. Deploy it as a software
+- Backend: FastAPI, SQLAlchemy 2.x, Alembic, Celery, Redis, PostgreSQL
+- Frontend: Vue 3, TypeScript, Vite, Pinia, Vue Router, Element Plus, ECharts
+- AI: Rule-based classifier, OpenAI-compatible API, local model provider
+- Deployment: Docker Compose, Nginx, vLLM
 
-In this way, you should download the newest release, and put your own bills in input folder. Then you could just click the .exe file to get your financial report.
+## 快速启动
 
+### 1. 启动依赖服务
 
+```bash
+cd infra
+docker compose up -d postgres redis
+```
 
-In the end, if you have any question using this project, contact us by Boring__Zheng@163.com.
+### 2. 启动后端
+
+```bash
+cd backend
+pip install -e .[dev]
+copy .env.example .env
+alembic upgrade head
+uvicorn backend.main:app --reload
+```
+
+### 3. 启动前端
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### 4. 启动完整容器化环境
+
+```bash
+cd infra
+docker compose up --build
+```
+
+## 主要页面
+
+- 登录/注册
+- Dashboard
+- 账单导入
+- 交易列表
+- 分类校正工作台
+- 分类管理
+- 报表中心
+- 系统设置
+
+## 目录结构
+
+```text
+backend/   FastAPI, SQLAlchemy, Celery, Alembic
+frontend/  Vue 3, TypeScript, Vite
+infra/     Docker Compose, Nginx, model service
+docs/      架构、接口、开发、部署、测试文档
+legacy/    旧版单体脚本与旧使用方式
+scripts/   辅助脚本与种子数据入口
+```
+
+## 开发流程概览
+
+1. 导入账单文件
+2. 解析为统一交易结构
+3. 规则分类优先命中
+4. 未命中或低置信度时调用模型
+5. 结果落库并进入校正工作台
+6. Dashboard 聚合与 PDF 报表生成
+
+## 部署概览
+
+- `frontend`、`backend`、`worker`、`postgres`、`redis`、`nginx`、`model-service`
+- 单机 Docker Compose 部署
+- `model-service` 默认使用 OpenAI-compatible 接口，后端仅通过配置切换 provider
+
+## 文档索引
+
+- [架构文档](./docs/architecture.md)
+- [接口文档](./docs/api.md)
+- [开发文档](./docs/development.md)
+- [部署文档](./docs/deployment.md)
+- [测试文档](./docs/testing.md)
+- [旧版工具说明](./legacy/README-legacy.md)
+
+## 当前状态
+
+本仓库已完成 monorepo 重构骨架，并提供可继续扩展的后端、前端、部署与文档基础。若需继续推进到生产级可用，需要在具备 Python 运行环境和数据库依赖的情况下补做本地联调与自动化测试。

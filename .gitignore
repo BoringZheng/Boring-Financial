@@ -1,15 +1,43 @@
+# Workspace
+.obsidian/
+.DS_Store
+Thumbs.db
+
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+.env
+backend/.env
+backend/.venv/
+backend/.uv-cache/
+backend/.uv-python/
+backend/.pytest-report-output/
+backend/pytest-cache-files-*/
+backend/tmp*/
+backend/storage/
+backend/.coverage
+backend/htmlcov/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+coverage/
+frontend/dist/
+frontend/node_modules/
 
 # Build artifacts
-/dist/
-/build/
 /*.spec
 *.exe
 
-# App data
-/output/
+# Runtime data
+*.db
+*.db-journal
+/output/*
 /input/*
 
 # keep folders

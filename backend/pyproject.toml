@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "boring-financial-backend"
+version = "0.1.0"
+description = "Backend service for Boring Financial"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116",
+  "uvicorn[standard]>=0.35",
+  "sqlalchemy>=2.0",
+  "alembic>=1.16",
+  "psycopg[binary]>=3.2",
+  "pydantic-settings>=2.10",
+  "PyJWT>=2.10",
+  "passlib[bcrypt]>=1.7",
+  "python-multipart>=0.0.20",
+  "httpx>=0.28",
+  "pandas>=2.2",
+  "openpyxl>=3.1",
+  "celery[redis]>=5.5",
+  "redis>=6.4",
+  "fpdf2>=2.8",
+  "email-validator>=2.2"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4",
+  "pytest-cov>=6.2"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
