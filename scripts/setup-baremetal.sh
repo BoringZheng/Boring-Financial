@@ -6,8 +6,25 @@ BACKEND_DIR="${ROOT_DIR}/backend"
 FRONTEND_DIR="${ROOT_DIR}/frontend"
 BACKEND_VENV="${BACKEND_DIR}/.venv"
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 is required"
+pick_python() {
+  local candidate
+  for candidate in python3.12 python3.11 python3; do
+    if ! command -v "${candidate}" >/dev/null 2>&1; then
+      continue
+    fi
+
+    if "${candidate}" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'; then
+      echo "${candidate}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+PYTHON_BIN="$(pick_python || true)"
+if [[ -z "${PYTHON_BIN}" ]]; then
+  echo "Python 3.11+ is required. Install python3.11 and python3.11-venv, then re-run this script."
   exit 1
 fi
 
@@ -16,8 +33,14 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ ! -d "${BACKEND_VENV}" ]]; then
-  python3 -m venv "${BACKEND_VENV}"
+if [[ -d "${BACKEND_VENV}" ]]; then
+  if ! "${BACKEND_VENV}/bin/python" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+    echo "Existing backend/.venv uses Python < 3.11. Remove it and re-run:"
+    echo "rm -rf backend/.venv"
+    exit 1
+  fi
+else
+  "${PYTHON_BIN}" -m venv "${BACKEND_VENV}"
 fi
 
 source "${BACKEND_VENV}/bin/activate"
@@ -35,5 +58,6 @@ fi
   VITE_API_BASE_URL=/api npm run build
 )
 
+echo "Using Python interpreter: ${PYTHON_BIN}"
 echo "Backend virtualenv is ready: ${BACKEND_VENV}"
 echo "Frontend build is ready: ${FRONTEND_DIR}/dist"
