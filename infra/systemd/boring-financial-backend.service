@@ -4,11 +4,11 @@ After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-Group=ubuntu
+User=boring
+Group=boring
 WorkingDirectory=/opt/Boring-Financial/backend
 EnvironmentFile=/opt/Boring-Financial/backend/.env
-ExecStart=/opt/Boring-Financial/backend/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
+ExecStart=/opt/Boring-Financial/backend/.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=3
 
