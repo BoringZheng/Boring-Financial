@@ -1,0 +1,142 @@
+flowchart LR
+    U["用户"]
+
+    subgraph FE["前端功能层 Vue 3 + TS + Vite"]
+        LOGIN["登录 / 注册"]
+        DASH["Dashboard 总览"]
+        IMPORT_UI["账单导入"]
+        TX_UI["交易列表"]
+        REVIEW_UI["分类校正工作台"]
+        CAT_UI["分类管理"]
+        REPORT_UI["报表中心"]
+        SETTING_UI["系统设置（预留）"]
+    end
+
+    subgraph GW["接入层"]
+        NGINX["Nginx"]
+    end
+
+    subgraph BE["后端应用层 FastAPI"]
+        AUTH["认证模块\n注册 / 登录 / JWT / 当前用户"]
+        CAT["分类管理模块\n系统分类 / 用户分类 / 分类规则"]
+        IMPORT["导入模块\n上传 / 批次 / 文件列表 / 状态跟踪"]
+        TX["交易模块\n查询 / 筛选 / 人工修正最终分类"]
+        CLS["分类模块\n重分类 / Provider 切换 / 分类结果记录"]
+        ANA["Dashboard 聚合模块\n总览指标 / Top 商户 / 分类分布 / 导入进度"]
+        REP["报表模块\nPDF 生成 / 下载"]
+        BOOT["启动初始化\n默认分类与规则种子"]
+    end
+
+    subgraph PIPE["账单处理与智能分类链路"]
+        PARSER["ParserRegistry\n微信/支付宝账单解析\nCSV / XLS / XLSX"]
+        NORMAL["TransactionNormalizer\n文本规范化"]
+        DEDUPE["Dedupe Hash\n交易去重"]
+        COMP["CompositeClassifier"]
+        RULE["RuleBasedClassifier\nCategoryRule 匹配"]
+        CACHE["ClassificationCache\n历史分类缓存"]
+        OAICLS["OpenAICompatibleClassifier"]
+        LOCALCLS["LocalModelClassifier"]
+        RESULT["ClassificationResult\n分类结果落库"]
+    end
+
+    subgraph ASYNC["异步任务层"]
+        THREAD["后台线程启动导入"]
+        CELERY["Celery Worker"]
+        TASK1["import.process_batch"]
+        TASK2["classification.reclassify"]
+        TASK3["reports.build"]
+    end
+
+    subgraph DATA["数据与存储层"]
+        PG["PostgreSQL\nusers\ncategories\ncategory_rules\nimport_batches\nuploaded_files\ntransactions\nclassification_results\nclassification_caches\nreport_jobs\ngenerated_reports"]
+        REDIS["Redis\nBroker / 队列"]
+        FILES["文件存储\nstorage/uploads\nstorage/reports"]
+    end
+
+    subgraph EXT["外部模型服务层"]
+        OPENAI["OpenAI-compatible 外部 API"]
+        LOCALAPI["本地模型服务\nMock / vLLM"]
+    end
+
+    LEGACY["Legacy 脚本（历史演进参考）"]
+
+    U --> LOGIN
+    U --> DASH
+    U --> IMPORT_UI
+    U --> TX_UI
+    U --> REVIEW_UI
+    U --> CAT_UI
+    U --> REPORT_UI
+
+    LOGIN --> NGINX
+    DASH --> NGINX
+    IMPORT_UI --> NGINX
+    TX_UI --> NGINX
+    REVIEW_UI --> NGINX
+    CAT_UI --> NGINX
+    REPORT_UI --> NGINX
+    SETTING_UI -.预留.-> NGINX
+
+    NGINX --> AUTH
+    NGINX --> CAT
+    NGINX --> IMPORT
+    NGINX --> TX
+    NGINX --> CLS
+    NGINX --> ANA
+    NGINX --> REP
+
+    BOOT --> CAT
+    BOOT --> PG
+
+    IMPORT --> FILES
+    IMPORT --> PARSER
+    IMPORT --> THREAD
+    IMPORT --> PG
+    THREAD --> TASK1
+    TASK1 --> CELERY
+    CELERY --> REDIS
+
+    PARSER --> NORMAL
+    NORMAL --> DEDUPE
+    DEDUPE --> COMP
+
+    COMP --> RULE
+    COMP --> CACHE
+    COMP --> OAICLS
+    COMP --> LOCALCLS
+
+    RULE --> PG
+    CACHE <--> PG
+    OAICLS --> OPENAI
+    LOCALCLS --> LOCALAPI
+
+    OAICLS --> RESULT
+    LOCALCLS --> RESULT
+    RULE --> RESULT
+    RESULT --> PG
+    COMP --> PG
+
+    TX <--> PG
+    TX --> CLS
+    REVIEW_UI --> CLS
+    CLS --> TASK2
+    TASK2 --> CELERY
+    CLS --> PG
+
+    DASH --> ANA
+    ANA --> PG
+
+    REPORT_UI --> REP
+    REP --> TASK3
+    TASK3 --> CELERY
+    REP --> FILES
+    REP --> PG
+
+    IMPORT_UI --> IMPORT
+    TX_UI --> TX
+    CAT_UI --> CAT
+    DASH --> ANA
+    REPORT_UI --> REP
+
+    PG -.按 user_id 隔离.-> AUTH
+    LEGACY -.仅作历史参考，不进入主链路.-> PARSER

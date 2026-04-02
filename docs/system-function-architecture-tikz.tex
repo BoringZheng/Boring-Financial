@@ -1,0 +1,69 @@
+% Recommended engine: XeLaTeX
+% Recommended preamble additions:
+% \usepackage{ctex}
+% \usepackage{tikz}
+% \usetikzlibrary{arrows.meta}
+
+\begin{frame}{系统功能架构图}
+\centering
+\begin{tikzpicture}[
+    x=1cm,
+    y=1cm,
+    font=\scriptsize,
+    >=Latex,
+    line/.style={->, thick, draw=black!70, shorten >=2pt, shorten <=2pt},
+    dashedline/.style={->, thick, dashed, draw=black!60, shorten >=2pt, shorten <=2pt},
+    box/.style={
+        rounded corners=3pt,
+        draw=black!55,
+        thick,
+        align=center,
+        inner sep=5pt,
+        minimum height=1.25cm,
+        text width=2.45cm
+    },
+    userbox/.style={box, fill=blue!8, text width=1.35cm},
+    frontendbox/.style={box, fill=cyan!10, text width=2.7cm},
+    gatewaybox/.style={box, fill=teal!10, text width=1.5cm},
+    backendbox/.style={box, fill=orange!12, text width=2.9cm},
+    aibox/.style={box, fill=purple!10, text width=2.9cm},
+    datastorebox/.style={box, fill=green!10, text width=2.55cm},
+    jobbox/.style={box, fill=yellow!18, text width=2.55cm},
+    extbox/.style={box, fill=red!8, text width=2.8cm},
+    legacybox/.style={box, fill=gray!12, text width=2.15cm}
+]
+
+\node[userbox]    (user)   at (0.0,  0.0) {用户};
+\node[frontendbox](fe)     at (2.7,  0.0) {Web 前端\\登录 / 导入 / 查询\\复核 / 分类 / 报表};
+\node[gatewaybox] (gw)     at (5.3,  0.0) {Nginx};
+\node[backendbox] (be)     at (8.5,  0.0) {FastAPI 后端\\认证 / 导入 / 交易\\统计 / 报表};
+\node[aibox]      (ai)     at (12.0, 0.0) {智能分类引擎\\规则 + 缓存\\外部 / 本地模型};
+
+\node[legacybox]  (legacy) at (2.8, -2.35) {Legacy 脚本\\历史参考};
+\node[datastorebox](fs)    at (6.2, -2.35) {文件存储\\上传账单 / PDF 报表};
+\node[datastorebox](pg)    at (9.4, -2.35) {PostgreSQL\\用户 / 分类 / 交易\\批次 / 分类结果};
+\node[jobbox]     (job)    at (12.6,-2.35) {Redis + Celery\\异步任务};
+\node[extbox]     (ext)    at (12.0,-4.05) {OpenAI-compatible API\\或本地模型服务};
+
+\draw[line] (user) -- (fe);
+\draw[line] (fe) -- (gw);
+\draw[line] (gw) -- (be);
+\draw[line] (be) -- (ai);
+
+\draw[line] (be.south west) |- (fs.north);
+\draw[line] (be.south) -- (pg.north);
+\draw[dashedline] (be.south east) |- (job.north);
+
+\draw[line] (ai.south) -- (ext.north);
+
+\draw[dashedline] (legacy.north east) to[out=20, in=210] (be.south west);
+
+\node[font=\tiny, align=center] at (11.0, -1.15) {异步导入 / 重分类 / 报表};
+\node[font=\tiny, align=center] at (5.8, -1.15) {演进来源};
+
+\end{tikzpicture}
+
+\vspace{0.4em}
+\footnotesize
+系统以前后端分离架构为核心，围绕账单导入、智能分类、人工复核、统计分析与报表导出形成完整闭环。
+\end{frame}

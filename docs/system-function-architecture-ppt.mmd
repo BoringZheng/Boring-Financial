@@ -1,0 +1,58 @@
+flowchart LR
+    U["用户"]
+    FE["Web 前端\n登录 / 总览 / 导入 / 交易 / 复核 / 分类 / 报表"]
+    GW["Nginx"]
+
+    subgraph BE["FastAPI 后端"]
+        AUTH["认证与多用户隔离"]
+        IMPORT["导入与解析"]
+        TX["交易查询与人工修正"]
+        ANA["统计分析与 PDF 报表"]
+    end
+
+    subgraph AI["智能分类引擎"]
+        COMP["组合分类器"]
+        RULE["规则分类"]
+        CACHE["分类缓存"]
+        MODEL["外部 / 本地模型"]
+    end
+
+    subgraph DATA["数据与存储"]
+        PG["PostgreSQL\n用户 / 分类 / 交易 / 批次 / 分类结果 / 报表"]
+        FILES["文件存储\n上传账单 / 生成报表"]
+        REDIS["Redis + Celery\n异步任务"]
+    end
+
+    LEGACY["Legacy 脚本\n历史参考"]
+
+    U --> FE --> GW
+    GW --> AUTH
+    GW --> IMPORT
+    GW --> TX
+    GW --> ANA
+
+    IMPORT --> FILES
+    IMPORT --> COMP
+    IMPORT --> PG
+
+    TX --> PG
+    TX --> COMP
+
+    ANA --> PG
+    ANA --> FILES
+
+    COMP --> RULE
+    COMP --> CACHE
+    COMP --> MODEL
+    CACHE --> PG
+    RULE --> PG
+    COMP --> PG
+
+    IMPORT -.可切换为异步任务.-> REDIS
+    TX -.重分类任务.-> REDIS
+    ANA -.报表任务.-> REDIS
+
+    MODEL --> OPENAI["OpenAI-compatible API"]
+    MODEL --> LOCAL["本地模型服务 / vLLM"]
+
+    LEGACY -.规则与报表逻辑演进来源.-> IMPORT

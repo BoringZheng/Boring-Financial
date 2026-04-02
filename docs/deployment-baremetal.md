@@ -2,12 +2,12 @@
 
 目标：
 
-- Ubuntu 22.04 宿主机直接运行 FastAPI 后端
-- 前端编译成静态文件，由宿主机 Nginx 提供
-- 公网机器通过同一个域名或 IP 访问
-- 默认不使用 Docker
+- Debian / Ubuntu 宿主机直接运行 FastAPI 后端
+- 前端编译为静态文件，由 Nginx 提供
+- 公网入口统一由 Nginx 暴露
+- 默认不依赖 Docker
 
-## 1. 推荐架构
+## 1. 推荐部署形态
 
 ```text
 browser -> nginx:80 -> /      -> frontend/dist
@@ -15,39 +15,42 @@ browser -> nginx:80 -> /api/* -> 127.0.0.1:8000
 browser -> nginx:80 -> /health -> 127.0.0.1:8000/health
 ```
 
-后端只监听 `127.0.0.1:8000`，不直接暴露公网。
+说明：
 
-## 2. 服务器安装依赖
+- 后端只监听 `127.0.0.1:8000`
+- 公网不直接暴露 8000
+- 静态资源不要放在 `/root/...`
+- 推荐部署目录：`/opt/Boring-Financial`
+
+## 2. 系统依赖
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip nodejs npm nginx
+sudo apt install -y git python3 python3-venv python3-pip nodejs npm nginx fonts-noto-cjk
 ```
 
-如果你需要 PDF 中文字体，额外安装：
+## 3. 获取代码
 
 ```bash
-sudo apt install -y fonts-noto-cjk
+cd /opt
+git clone <your-repo-url> Boring-Financial
+cd /opt/Boring-Financial
 ```
 
-## 3. 初始化项目
-
-仓库根目录执行：
+## 4. 初始化项目
 
 ```bash
 bash scripts/setup-baremetal.sh
 ```
 
-这个脚本会：
+该脚本会：
 
-1. 创建 `backend/.venv`
-2. 安装后端依赖
-3. 生成 `backend/.env`
-4. 执行前端 `npm ci` 和 `npm run build`
+1. 选择 Python 3.11+
+2. 创建 `backend/.venv`
+3. 安装后端依赖
+4. 构建前端静态资源到 `frontend/dist`
 
-## 4. 配置后端环境变量
-
-复制模板：
+## 5. 配置后端环境变量
 
 ```bash
 cp backend/.env.bare.example backend/.env
@@ -55,87 +58,162 @@ cp backend/.env.bare.example backend/.env
 
 至少修改：
 
+- `APP_ENV=prod`
 - `SECRET_KEY`
 - `OPENAI_API_KEY`
 - `CORS_ORIGINS`
 
-默认使用 SQLite：
+推荐最小配置：
 
 ```env
 DATABASE_URL=sqlite:///./storage/app.db
 TASK_ALWAYS_EAGER=true
 ```
 
-这意味着你不需要额外安装 PostgreSQL 和 Redis 就能先跑起来。
+## 6. systemd 服务
 
-## 5. 后端 systemd 服务
-
-模板文件：
+参考模板：
 
 - `infra/systemd/boring-financial-backend.service`
 
-使用前先改两处：
+推荐内容：
 
-1. `User` / `Group`
-2. `WorkingDirectory` / `EnvironmentFile` / `ExecStart`
+```ini
+[Unit]
+Description=Boring Financial FastAPI Backend
+After=network.target
 
-示例命令：
+[Service]
+Type=simple
+User=boring
+Group=boring
+WorkingDirectory=/opt/Boring-Financial/backend
+EnvironmentFile=/opt/Boring-Financial/backend/.env
+ExecStart=/opt/Boring-Financial/backend/.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+部署命令：
 
 ```bash
-sudo cp infra/systemd/boring-financial-backend.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now boring-financial-backend
 sudo systemctl status boring-financial-backend
 ```
 
-## 6. Nginx 提供静态页并反代 API
+## 7. Nginx 配置
 
-模板文件：
+参考模板：
 
 - `infra/nginx/boring-financial.bare.conf`
 
-使用前先改：
+推荐站点配置：
 
-1. `root` 为你的前端静态目录
-2. `server_name` 为你的域名或 `_`
+```nginx
+server {
+  listen 80;
+  server_name _;
 
-示例命令：
+  root /opt/Boring-Financial/frontend/dist;
+  index index.html;
+  client_max_body_size 50m;
+
+  location /api/ {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location /health {
+    proxy_pass http://127.0.0.1:8000/health;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+}
+```
+
+启用配置：
 
 ```bash
 sudo cp infra/nginx/boring-financial.bare.conf /etc/nginx/sites-available/boring-financial
 sudo ln -sf /etc/nginx/sites-available/boring-financial /etc/nginx/sites-enabled/boring-financial
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## 7. 验证
+## 8. 验证
 
-后端健康检查：
+服务器本机：
 
 ```bash
 curl http://127.0.0.1:8000/health
-curl http://YOUR_SERVER_IP/health
+curl http://127.0.0.1/health
+curl http://127.0.0.1/
 ```
 
-前端静态页：
+外部机器：
 
 ```bash
+curl http://YOUR_SERVER_IP/health
 curl http://YOUR_SERVER_IP/
 ```
 
-## 8. 更新发布
+## 9. 常见问题
 
-每次代码更新后：
+### 9.1 首页 500，但 `/health` 正常
+
+高概率原因：
+
+- Nginx 无法读取前端静态资源
+- `root` 指向错误
+- 静态资源放在 `/root/...`
+
+处理：
+
+- 把静态资源迁到 `/opt/Boring-Financial/frontend/dist`
+
+### 9.2 systemd 报 `203/EXEC`
+
+处理：
+
+- 不直接运行 `uvicorn`
+- 改为 `python -m uvicorn`
+
+### 9.3 systemd 报 `217/USER`
+
+处理：
+
+- 检查服务用户是否存在
+- 检查该用户是否有权限访问部署目录
+
+### 9.4 `cors_origins` 解析失败
+
+处理：
+
+- 检查 `CORS_ORIGINS` 写法
+- 支持逗号分隔字符串或 JSON 数组
+
+## 10. 更新发布
 
 ```bash
+cd /opt/Boring-Financial
 git pull --ff-only
 bash scripts/setup-baremetal.sh
 sudo systemctl restart boring-financial-backend
 sudo systemctl reload nginx
 ```
-
-## 9. 关键注意点
-
-- 前端现在默认请求同源 `/api`，适合 Nginx 同域部署
-- PDF 报表生成已经增加 Ubuntu 字体 fallback，但服务器最好安装 `fonts-noto-cjk`
-- 如果后续访问量上来，再把 SQLite 换成 PostgreSQL

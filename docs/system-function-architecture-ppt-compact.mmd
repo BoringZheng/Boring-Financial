@@ -1,0 +1,20 @@
+flowchart LR
+    U["用户"]
+    FE["Web 前端\n登录 / 导入 / 查询 / 复核 / 报表"]
+    GW["Nginx"]
+    BE["FastAPI 后端\n认证 / 导入 / 交易 / 统计 / 报表"]
+    AI["智能分类引擎\n规则 + 缓存 + 外部/本地模型"]
+    PG["PostgreSQL\n用户 / 分类 / 交易 / 批次 / 分类结果"]
+    FS["文件存储\n上传账单 / PDF 报表"]
+    JOB["Redis + Celery\n异步任务"]
+    EXT["OpenAI-compatible API\n或本地模型服务"]
+    LEGACY["Legacy 脚本\n历史参考"]
+
+    U --> FE --> GW --> BE
+    BE --> AI
+    BE --> PG
+    BE --> FS
+    BE -.异步导入 / 重分类 / 报表.-> JOB
+    AI --> PG
+    AI --> EXT
+    LEGACY -.演进来源.-> BE

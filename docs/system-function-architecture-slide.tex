@@ -1,0 +1,23 @@
+% Recommended preamble additions:
+% \usepackage{graphicx}
+%
+% Recommended workflow:
+% 1. Export docs/system-function-architecture-ppt-compact.mmd to PDF
+% 2. Put the exported file beside your main .tex, e.g. figures/system-function-architecture.pdf
+% 3. Paste the frame below into your beamer document
+
+\begin{frame}{系统功能架构图}
+    \centering
+    \includegraphics[width=0.96\textwidth,height=0.72\textheight,keepaspectratio]{figures/system-function-architecture.pdf}
+
+    \vspace{0.5em}
+    \footnotesize
+    系统以前后端分离架构为核心，围绕账单导入、智能分类、人工复核、统计分析与报表导出形成完整闭环。
+\end{frame}
+
+% If the figure looks too small, try this alternative:
+%
+% \begin{frame}{系统功能架构图}
+%     \centering
+%     \includegraphics[width=\textwidth]{figures/system-function-architecture.pdf}
+% \end{frame}

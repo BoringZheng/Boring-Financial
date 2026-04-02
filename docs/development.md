@@ -1,102 +1,173 @@
-﻿# 开发文档
+# 开发者文档
 
-## 1. 本地开发环境
+## 1. Who should read this
 
-建议环境：
+本文档面向接手本仓库的开发者，目标是让你在不依赖额外说明的情况下完成以下事务：
+
+- 理解仓库结构与主要模块职责
+- 在本地启动前后端并联调
+- 了解当前项目在开发态和裸机部署态的差异
+- 快速定位常见问题
+
+## 2. 仓库结构
+
+```text
+backend/   FastAPI 后端、数据库模型、分类逻辑、报表生成、测试
+frontend/  Vue 3 + Vite 前端
+infra/     Docker Compose、Nginx、systemd、模型服务模板
+docs/      架构、接口、开发、部署、测试文档
+legacy/    旧版脚本
+scripts/   本地开发与裸机部署辅助脚本
+```
+
+关键目录：
+
+- `backend/src/backend/api/`：HTTP 路由层
+- `backend/src/backend/services/`：核心业务逻辑
+- `backend/src/backend/models/`：SQLAlchemy 模型
+- `backend/src/backend/core/`：配置、安全、Celery 配置
+- `frontend/src/pages/`：页面级组件
+- `frontend/src/api/client.ts`：统一 API 客户端
+
+## 3. 技术栈与当前实现取向
+
+后端：
+
+- FastAPI
+- SQLAlchemy 2.x
+- Pydantic Settings
+- Alembic
+- `fpdf2`
+
+前端：
+
+- Vue 3
+- Vite 7
+- TypeScript
+- Pinia
+- Vue Router
+- Element Plus
+
+## 4. 开发环境要求
+
+建议：
 
 - Python 3.11+
 - Node.js 20+
+- npm 10+
+
+可选：
+
 - PostgreSQL 16+
 - Redis 7+
 - Docker / Docker Compose
 
-## 2. 后端启动
+Windows 开发建议：
+
+- 使用 PowerShell
+- 如果 `npm` 被执行策略拦截，改用 `npm.cmd`
+
+## 5. 后端本地开发
+
+### 5.1 创建虚拟环境
 
 ```bash
 cd backend
-pip install -e .[dev]
+python -m venv .venv
+```
+
+Windows:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Linux/macOS:
+
+```bash
+source .venv/bin/activate
+```
+
+### 5.2 安装依赖
+
+```bash
+pip install --upgrade pip
+pip install -e ".[dev]"
+```
+
+### 5.3 准备环境变量
+
+开发环境模板：
+
+```bash
 copy .env.example .env
-alembic upgrade head
+```
+
+或：
+
+```bash
+cp .env.example .env
+```
+
+最关键的几个变量：
+
+- `DATABASE_URL`
+- `CLASSIFICATION_PROVIDER`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `TASK_ALWAYS_EAGER`
+- `CORS_ORIGINS`
+
+开发机如果只想先跑通，不想装 PostgreSQL，可以把：
+
+```env
+DATABASE_URL=sqlite:///./storage/app.db
+TASK_ALWAYS_EAGER=true
+```
+
+### 5.4 启动后端
+
+```bash
 uvicorn backend.main:app --reload
 ```
 
-说明：
+默认健康检查：
 
-- 当前代码在应用启动时也会自动 `create_all`，便于快速跑通
-- 若要严格控制模式，建议后续补齐正式 Alembic migration
+```text
+http://127.0.0.1:8000/health
+```
 
-## 3. 前端启动
+## 6. 前端本地开发
+
+### 6.1 安装依赖
 
 ```bash
 cd frontend
 npm install
+```
+
+### 6.2 启动开发服务器
+
+```bash
 npm run dev
 ```
 
-默认地址：`http://localhost:5173`
+默认地址：
 
-## 4. 一键容器开发
-
-```bash
-powershell -ExecutionPolicy Bypass -File .\scripts\dev-up.ps1 -Build
+```text
+http://127.0.0.1:5173
 ```
 
-## 5. 环境变量
+当前前端开发代理已经配置为：
 
-后端关键变量：
+- `/api` -> `http://127.0.0.1:8000`
 
-- `DATABASE_URL`
-- `REDIS_URL`
-- `CLASSIFICATION_PROVIDER`
-- `OPENAI_API_BASE`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `LOCAL_MODEL_API_BASE`
-- `LOCAL_MODEL_API_KEY`
-- `LOCAL_MODEL_NAME`
-- `LOW_CONFIDENCE_THRESHOLD`
-- `TASK_ALWAYS_EAGER`
+这意味着本地联调时只要后端跑在 8000 端口即可。
 
-## 6. 数据库迁移
+## 7. 开发者须知
 
-已包含 Alembic 基础结构：
-
-```bash
-cd backend
-alembic upgrade head
-alembic revision -m "your message"
-```
-
-当前仓库更偏课程项目骨架，若继续迭代，建议第一时间补正式 migration 文件。
-
-## 7. 测试与调试
-
-```bash
-cd backend
-pytest
-```
-
-当前提供了基础单元测试：
-
-- `tests/test_security.py`
-- `tests/test_normalizers.py`
-
-调试建议：
-
-- 导入问题优先查看 `uploaded_files.error_message`
-- 模型问题优先查看 `classification_results.raw_response`
-- PDF 问题优先查看 `backend/storage/reports/`
-
-## 8. 常见问题
-
-### PowerShell 无法执行 npm
-
-请使用 `npm.cmd`，或临时绕过执行策略。
-
-### 本地没有 GPU
-
-可以先使用 `infra/model-service/app.py` 的 mock provider 联调，再在云服务器切到 vLLM。
-
-### 账单解析失败
-
-先检查导出文件是否为原始账单格式；当前只支持微信和支付宝导出格式。
+如果你想对本项目做出贡献，你应当：
+1. 从main branch fork一个分支，并只在你的分支上进行改动。
+2. 你应当只改动\backend \docs \frontend 中的文件。
+3. 你应当参照README.md中的文件索引，对于你的改动在对应的文档中做出说明。
+4. 如果你已经测试完成你的分支并认为其可以上线，那么你应当提一个pull request而非直接commit to main branch。
