@@ -1,36 +1,39 @@
-# 部署文档
+# Docker 部署文档
 
-## 1. 先同步到 GitHub
+本文档说明如何使用 Docker Compose 部署 Boring Financial。低配服务器也可以参考 [裸机部署文档](./deployment-baremetal.md)，减少容器数量。
 
-当前仓库已经配置好远程：
+## 1. 服务组成
 
-- `origin -> https://github.com/BoringZheng/Boring-Financial.git`
+`infra/docker-compose.yml` 包含：
 
-建议先在本地完成一次干净提交，再推送：
+- `postgres`: PostgreSQL 16
+- `redis`: Redis 7
+- `backend`: FastAPI 后端
+- `worker`: Celery worker
+- `frontend`: 前端静态站点
+- `model-service`: mock OpenAI-compatible 模型服务
+- `nginx`: 统一入口，代理前端和 `/api`
 
-```bash
-git status
-git add .gitignore .dockerignore README.md backend docs frontend infra legacy scripts output/.gitkeep
-git rm --cached -r .obsidian __pycache__ input output
-git commit -m "chore: prepare repo for github and ubuntu deployment"
-git push origin main
+后端镜像构建会复制 `backend/uv.lock`，并在镜像内执行 `uv sync --frozen --no-dev`，因此容器依赖版本与锁文件保持一致。
+
+默认入口：
+
+```text
+browser -> nginx:80 -> frontend
+browser -> nginx:80/api -> backend:8000
 ```
 
-说明：
+## 2. 服务器准备
 
-- `git rm --cached` 只会把敏感账单、运行产物和 Obsidian 配置从版本控制里移除，不会删除你本地文件
-- `input/.gitkeep` 与 `output/.gitkeep` 会保留空目录结构
+推荐环境：
 
-## 2. Ubuntu 22.04 服务器准备
-
-最低建议：
-
-- Ubuntu 22.04
-- 4 vCPU / 8 GB RAM
+- Ubuntu 22.04 或 Debian 12
+- 2 vCPU / 4 GB RAM 可跑课程 demo
+- 4 vCPU / 8 GB RAM 更适合同时运行 PostgreSQL、Redis、worker 和 mock model
 - 开放 `80` 端口
-- 若部署 vLLM，需要 NVIDIA GPU、驱动和 `nvidia-container-toolkit`
+- 已安装 Docker 和 Docker Compose
 
-仓库内提供了安装脚本：
+仓库提供基础脚本：
 
 ```bash
 sudo bash scripts/bootstrap-ubuntu2204.sh
@@ -38,64 +41,56 @@ sudo usermod -aG docker $USER
 newgrp docker
 ```
 
-## 3. 在服务器拉取 GitHub 仓库
+## 3. 获取代码
 
 ```bash
-sudo mkdir -p /opt
-sudo chown $USER:$USER /opt
 cd /opt
 git clone https://github.com/BoringZheng/Boring-Financial.git
 cd Boring-Financial
 ```
 
-如果仓库是私有的，先在服务器配置 GitHub SSH Key，或者使用 PAT。
+如果仓库为私有仓库，请先配置 SSH key 或 PAT。
 
-## 4. 配置服务器环境变量
+## 4. 配置环境变量
 
 ```bash
 cp infra/.env.example infra/.env.server
 ```
 
-至少修改这些值：
+至少检查以下变量：
 
+- `POSTGRES_DB`
+- `POSTGRES_USER`
 - `POSTGRES_PASSWORD`
-- `OPENAI_API_KEY`，如果你要走 OpenAI API
-- `CORS_ORIGINS`，改成你的域名
-- `LOCAL_MODEL_NAME`，如果你不用默认 mock 服务
+- `OPENAI_API_KEY`
+- `CLASSIFICATION_PROVIDER`
+- `CORS_ORIGINS`
+- `NGINX_HTTP_PORT`
+- `TASK_ALWAYS_EAGER`
 
-默认端口绑定已经收紧到本机回环地址：
+低配服务器建议：
 
-- PostgreSQL: `127.0.0.1:5432`
-- Redis: `127.0.0.1:6379`
-- Backend: `127.0.0.1:8000`
-- Frontend: `127.0.0.1:4173`
-- Model service: `127.0.0.1:8001`
-- Nginx: `0.0.0.0:80`
+```env
+TASK_ALWAYS_EAGER=true
+CLASSIFICATION_PROVIDER=composite
+```
 
-这意味着公网默认只暴露 Nginx。
+如暂时不接真实模型，可保持 mock `model-service`。
 
 ## 5. 启动服务
 
-### 5.1 CPU / mock model
+CPU / mock model 部署：
 
 ```bash
 bash scripts/deploy-ubuntu.sh
 ```
 
-### 5.2 GPU / vLLM
+手动启动：
 
 ```bash
-bash scripts/deploy-ubuntu.sh --with-vllm
+cd infra
+docker compose --env-file .env.server up --build -d
 ```
-
-部署脚本会：
-
-1. 检查 `docker` 和 `docker compose`
-2. 自动 `git pull --ff-only`
-3. 使用 `infra/.env.server` 启动容器
-4. 输出当前容器状态
-
-## 6. 常用运维命令
 
 查看状态：
 
@@ -115,30 +110,68 @@ docker compose --env-file infra/.env.server -f infra/docker-compose.yml logs -f 
 docker compose --env-file infra/.env.server -f infra/docker-compose.yml down
 ```
 
-如果启用了 vLLM，把 `-f infra/docker-compose.cloud.yml` 一并带上。
+## 6. GPU / vLLM 部署
 
-## 7. HTTPS 与域名
+如果服务器有 NVIDIA GPU，可叠加 `infra/docker-compose.cloud.yml`：
 
-当前仓库的 `infra/nginx/nginx.conf` 只处理 HTTP 反向代理。线上要上 HTTPS，建议：
+```bash
+bash scripts/deploy-ubuntu.sh --with-vllm
+```
 
-1. 域名解析到服务器公网 IP
-2. 宿主机用 Caddy、Nginx 或 Certbot 处理证书
-3. 证书终止后再反向代理到容器里的 `nginx:80`
+使用 vLLM 前需确认：
 
-如果你希望证书也放进容器里，可以再补一份 HTTPS 版 Nginx 配置。
+- NVIDIA driver 已安装。
+- `nvidia-container-toolkit` 已配置。
+- `LOCAL_MODEL_NAME` 与模型服务一致。
+- `LOCAL_MODEL_API_BASE` 指向 vLLM OpenAI-compatible 地址。
 
-## 8. 数据持久化与备份
+## 7. 端口说明
+
+默认端口绑定可通过 `.env.server` 调整：
+
+- PostgreSQL: `POSTGRES_PORT_BIND`
+- Redis: `REDIS_PORT_BIND`
+- Backend: `BACKEND_PORT_BIND`
+- Frontend: `FRONTEND_PORT_BIND`
+- Model service: `MODEL_SERVICE_PORT_BIND`
+- Nginx: `NGINX_HTTP_PORT`
+
+生产建议只暴露 Nginx，数据库、Redis、后端和模型服务绑定本机或内网。
+
+## 8. 数据持久化
 
 Compose volumes：
 
-- `postgres-data`
-- `backend-storage`
+- `postgres-data`: PostgreSQL 数据。
+- `backend-storage`: 上传文件和生成报表。
 
-建议定期备份：
+备份时不要只备份数据库，也要备份 `backend-storage`，否则历史上传文件和 PDF 报表会丢失。
+
+## 9. HTTPS 和域名
+
+当前 `infra/nginx/nginx.conf` 只处理 HTTP。生产环境建议：
+
+1. 域名解析到服务器公网 IP。
+2. 使用 Caddy、宿主机 Nginx 或 Certbot 处理 TLS。
+3. TLS 终止后反向代理到容器中的 Nginx `80` 端口。
+
+## 10. 更新发布
 
 ```bash
-docker volume inspect boring-financial_postgres-data
-docker volume inspect boring-financial_backend-storage
+cd /opt/Boring-Financial
+git pull --ff-only
+bash scripts/deploy-ubuntu.sh
 ```
 
-另外，`backend-storage` 里会保存上传文件和生成报表，不要只备份数据库。
+发布后验证：
+
+```bash
+curl http://127.0.0.1/health
+curl http://127.0.0.1/
+```
+
+浏览器访问：
+
+```text
+http://YOUR_SERVER_IP/
+```

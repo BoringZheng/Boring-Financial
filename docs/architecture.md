@@ -1,59 +1,103 @@
-﻿# 架构文档
+# 架构文档
 
 ## 1. 总体架构
 
-Boring Financial 采用前后端分离 monorepo 架构，核心目标是把旧版脚本重构为一个多用户、可部署、可替换分类模型的软件系统。
+Boring Financial 采用前后端分离 monorepo 架构。前端负责登录、账单导入、交易筛选、分类校正、统计看板和报表展示；后端负责认证、数据隔离、账单解析、分类、聚合和 PDF 生成。
 
 ```mermaid
 flowchart LR
-    FE[Vue 3 Frontend] --> NG[Nginx]
-    NG --> API[FastAPI Backend]
-    API --> DB[(PostgreSQL)]
-    API --> REDIS[(Redis)]
-    API --> CELERY[Celery Worker]
+    FE["Vue 3 + Element Plus + ECharts"] --> NG["Nginx / Vite Proxy"]
+    NG --> API["FastAPI Backend"]
+    API --> DB[("PostgreSQL / SQLite")]
+    API --> REDIS[("Redis")]
+    API --> CELERY["Celery Worker"]
     CELERY --> DB
-    API --> OPENAI[OpenAI-Compatible API]
-    API --> LOCAL[Local Model Service]
+    API --> OPENAI["OpenAI-Compatible API"]
+    API --> LOCAL["Local Model Service / vLLM"]
 ```
 
-## 2. 模块边界
+低配服务器部署时推荐：
 
-### 前端
+- 前端构建为静态文件，由 Nginx 提供。
+- 后端监听 `127.0.0.1:8000`，由 Nginx 反向代理 `/api`。
+- `TASK_ALWAYS_EAGER=true` 可减少 Celery/Redis 运行成本。
+- 不在前端高频触发模型调用，重分类只在校正工作台中显式执行。
 
-- `frontend/src/pages/LoginPage.vue`: 登录与注册
-- `frontend/src/pages/DashboardPage.vue`: 统计总览
-- `frontend/src/pages/ImportsPage.vue`: 账单上传
-- `frontend/src/pages/TransactionsPage.vue`: 交易列表
-- `frontend/src/pages/ReviewPage.vue`: 分类校正
-- `frontend/src/pages/CategoriesPage.vue`: 分类管理
-- `frontend/src/pages/ReportsPage.vue`: 报表生成与下载
-- `frontend/src/pages/SettingsPage.vue`: provider 与阈值展示
+## 2. 前端模块
 
-### 后端
+前端入口位于 `frontend/src`。
 
-- `auth`: 注册、登录、当前用户信息
-- `categories`: 系统分类与用户自定义分类
-- `imports`: 文件上传、导入批次、账单解析
-- `transactions`: 交易查询与人工分类修正
-- `classification`: 重分类接口与 provider 切换
-- `analytics`: Dashboard 聚合
-- `reports`: PDF 报表生成与下载
-- `jobs`: Celery 异步任务入口
+- `layouts/AppLayout.vue`: 深色侧边栏、顶部栏、用户区和主工作台布局。
+- `pages/LoginPage.vue`: 登录/注册。
+- `pages/DashboardPage.vue`: 财务驾驶舱，复用 `/dashboard/summary`。
+- `pages/ImportsPage.vue`: 账单上传、导入记录、批次进度和批次删除。
+- `pages/TransactionsPage.vue`: 交易筛选、分页表格和详情抽屉。
+- `pages/ReviewPage.vue`: 分类校正工作台。
+- `pages/CategoriesPage.vue`: 系统分类和用户自定义分类。
+- `pages/ReportsPage.vue`: 报表条件、摘要预览、PDF 生成和下载。
+- `pages/SettingsPage.vue`: provider、阈值和模型配置展示。
+- `api/client.ts`: Axios 客户端，统一注入 Bearer Token。
+- `stores/auth.ts`: 登录态、token、本地存储和当前用户。
 
-## 3. 数据流
+前端设计系统：
 
-1. 用户上传微信或支付宝账单文件。
-2. 后端保存原始文件并创建 `import_batches`、`uploaded_files`。
-3. `ParserRegistry` 解析文件，归一化为统一交易结构。
-4. `TransactionNormalizer` 生成规范化字段与去重哈希。
-5. `CompositeClassifier` 先走规则匹配，再走缓存，最后调用模型 provider。
-6. 自动分类结果写入 `transactions` 和 `classification_results`。
-7. 低置信度或无类目结果进入校正工作台。
-8. Dashboard 与 PDF 报表从交易表聚合生成。
+- 深色导航：`#06233D` / `#041A2E`
+- 主色：`#00A884`
+- 页面背景：`#F5F7FA`
+- 卡片背景：`#FFFFFF`
+- 状态色：成功 `#22C55E`、警告 `#F59E0B`、错误 `#EF4444`、信息 `#3B82F6`
 
-## 4. 分类器抽象
+## 3. 后端模块
 
-分类器统一输出以下字段：
+后端入口位于 `backend/src/backend`。
+
+- `api/routes_auth.py`: 注册、登录、当前用户。
+- `api/routes_categories.py`: 分类查询、新增、更新。
+- `api/routes_imports.py`: 上传文件、导入批次、上传文件列表、批次删除。
+- `api/routes_transactions.py`: 交易分页查询和人工分类修正。
+- `api/routes_classification.py`: 对指定交易重分类。
+- `api/routes_dashboard.py`: Dashboard 聚合数据。
+- `api/routes_reports.py`: PDF 报表生成和下载。
+- `services/imports.py`: 导入批次创建、文件保存、解析和交易落库。
+- `services/classifiers.py`: 规则、缓存、外部模型、本地模型与混合分类链路。
+- `services/analytics.py`: Dashboard 聚合。
+- `services/reports.py`: PDF 报表构建。
+
+## 4. 核心数据流
+
+1. 用户登录后上传微信或支付宝账单文件。
+2. 后端创建 `import_batches` 和 `uploaded_files`，保存原始文件。
+3. Parser 将不同平台账单转换为统一交易结构。
+4. Normalizer 生成规范化字段和 `dedupe_hash`，避免重复导入。
+5. Classifier 按规则、缓存、模型 provider 的顺序给出分类建议。
+6. 分类结果写入 `transactions` 和 `classification_results`。
+7. 低置信度或未命中分类的交易进入校正工作台。
+8. Dashboard 和 PDF 报表基于交易表聚合生成。
+
+## 5. 数据模型边界
+
+主要表：
+
+- `users`: 用户账号。
+- `categories`: 系统分类和用户分类。
+- `category_rules`: 分类规则预留表。
+- `import_batches`: 导入批次。
+- `uploaded_files`: 上传文件。
+- `transactions`: 交易主表。
+- `classification_results`: 分类历史结果。
+- `classification_caches`: 分类缓存。
+- `report_jobs` / `generated_reports`: 报表任务和生成结果。
+
+多用户隔离策略：
+
+- 所有用户私有资源通过 `user_id` 归属。
+- 接口通过 Bearer Token 获取当前用户。
+- 查询、更新、下载前验证资源归属。
+- 系统分类使用 `user_id = null`，用户分类使用当前用户 ID。
+
+## 6. 分类器抽象
+
+分类器统一输出：
 
 - `category_id`
 - `subcategory_name`
@@ -62,46 +106,27 @@ flowchart LR
 - `provider`
 - `raw_response`
 
-当前实现的 provider：
+当前 provider：
 
-- `rule`: 规则分类
-- `openai_compatible_api`: 外部大模型 API
-- `composite`: 规则优先 + 缓存 + API
-- `local_model`: 本地 OpenAI-compatible 模型服务
+- `rule`: 规则分类。
+- `openai_compatible_api`: 外部 OpenAI-compatible API。
+- `local_model`: 本地 OpenAI-compatible 模型服务。
+- `composite`: 规则优先 + 缓存 + 模型 API。
 
-## 5. 异步任务设计
+## 7. 异步任务设计
 
-虽然当前导入与报表逻辑在开发态可以同步执行，但代码层已经为 Celery 预留任务入口：
+代码中预留 Celery 任务入口：
 
 - `import.process_batch`
 - `classification.reclassify`
 - `reports.build`
 
-开发环境可通过 `TASK_ALWAYS_EAGER=true` 直接执行；生产环境通过 worker 消费 Redis 队列。
+开发和低配服务器可使用 `TASK_ALWAYS_EAGER=true` 同步执行，减少运行组件；生产环境可改为 Redis + Celery worker 异步消费。
 
-## 6. 多用户隔离策略
+## 8. 可扩展方向
 
-- 所有业务表以 `user_id` 关联用户
-- 访问接口统一从 Bearer Token 解析当前用户
-- 查询、更新、下载前都验证资源归属
-- 系统分类 `user_id = null`，用户分类 `user_id = 当前用户`
-
-## 7. 本地模型替换方案
-
-### 开发态
-
-- `infra/model-service/app.py` 提供 mock OpenAI-compatible 服务
-- 用于联调 provider 切换与前后端演示
-
-### 云端
-
-- `infra/docker-compose.cloud.yml` 使用 `vllm/vllm-openai`
-- 将 `LOCAL_MODEL_API_BASE` 指向 vLLM 服务
-- 后端无需改业务代码，只切配置
-
-## 8. 后续增强建议
-
-- 引入真正的 Alembic 迁移版本管理
-- 对导入和报表生成完全改为异步任务
-- 增加更完整的批量校正和图表展示
-- 加入评测集管理与 LoRA 微调脚本
+- 增加 `GET /api/reports` 报表历史列表。
+- 将 `CategoryRule` 暴露为规则管理功能。
+- 为导入、分类和报表补充 API 测试。
+- 为前端增加端到端测试，覆盖课堂 demo 主流程。
+- 对 Dashboard 聚合增加缓存或物化统计，支持更大数据量。

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as echarts from 'echarts'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { Refresh } from '@element-plus/icons-vue'
 import api from '../api/client'
 
 type Category = {
@@ -67,12 +68,18 @@ const categoryChartRef = ref<HTMLDivElement | null>(null)
 let trendChart: echarts.ECharts | null = null
 let categoryChart: echarts.ECharts | null = null
 
+const savingsRate = computed(() => {
+  const income = Number(summary.value.income_total || 0)
+  const net = Number(summary.value.net_total || 0)
+  if (income <= 0) return '0.0%'
+  return `${((net / income) * 100).toFixed(1)}%`
+})
+
 const metrics = computed(() => [
-  { label: '总支出', value: summary.value.expense_total },
-  { label: '总收入', value: summary.value.income_total },
-  { label: '净流入', value: summary.value.net_total },
-  { label: '交易数', value: summary.value.transaction_count },
-  { label: '待校正', value: summary.value.pending_review_count },
+  { label: '本月收入', value: money(summary.value.income_total), foot: '已导入账单统计', tone: 'positive' },
+  { label: '本月支出', value: money(summary.value.expense_total), foot: '按当前筛选范围', tone: 'negative' },
+  { label: '储蓄率', value: savingsRate.value, foot: `净流入 ${money(summary.value.net_total)}`, tone: 'primary' },
+  { label: '未分类交易', value: `${summary.value.pending_review_count} 笔`, foot: `共 ${summary.value.transaction_count} 笔交易`, tone: 'warning' },
 ])
 
 function buildSummaryParams() {
@@ -84,21 +91,35 @@ function buildSummaryParams() {
   if (filters.category_id !== undefined) {
     params.append('category_id', String(filters.category_id))
   }
-  if (filters.uploaded_file_ids.length) {
-    filters.uploaded_file_ids.forEach((fileId) => {
-      params.append('uploaded_file_ids', String(fileId))
-    })
-  }
+  filters.uploaded_file_ids.forEach((fileId) => params.append('uploaded_file_ids', String(fileId)))
   return params
 }
 
-function formatMoney(value: string | number) {
-  return Number(value || 0).toFixed(2)
+function money(value: string | number) {
+  return `¥ ${Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function formatImportFileLabel(file: ImportFileOption) {
   const platform = file.platform || '未知平台'
-  return `[批次 ${file.batch_id}] ${platform} - ${file.filename}`
+  return `批次 ${file.batch_id} / ${platform} / ${file.filename}`
+}
+
+function jobStatusType(status: string) {
+  if (status === 'done') return 'success'
+  if (status === 'failed' || status === 'partial_failed') return 'danger'
+  if (status === 'processing' || status === 'queued') return 'warning'
+  return 'info'
+}
+
+function jobStatusText(status: string) {
+  const statusMap: Record<string, string> = {
+    queued: '排队中',
+    processing: '解析中',
+    done: '成功',
+    partial_failed: '部分失败',
+    failed: '失败',
+  }
+  return statusMap[status] ?? status
 }
 
 function initCharts() {
@@ -116,61 +137,56 @@ function resizeCharts() {
 }
 
 function renderCharts() {
-  if (!trendChart || !categoryChart) {
-    return
-  }
+  if (!trendChart || !categoryChart) return
 
   trendChart.setOption({
-    color: ['#d96c1f', '#4f7cff'],
+    color: ['#00A884', '#EF4444'],
     tooltip: { trigger: 'axis' },
-    legend: { data: ['支出', '收入'] },
-    grid: { left: 32, right: 24, top: 48, bottom: 32 },
+    legend: { top: 0, right: 0, data: ['收入', '支出'] },
+    grid: { left: 42, right: 20, top: 46, bottom: 30 },
     xAxis: {
       type: 'category',
+      boundaryGap: false,
       data: summary.value.expense_trend.map((item) => item.date),
-      axisLabel: { color: '#6f6257' },
+      axisLine: { lineStyle: { color: '#E5E7EB' } },
+      axisLabel: { color: '#6B7280' },
     },
     yAxis: {
       type: 'value',
-      axisLabel: {
-        color: '#6f6257',
-        formatter: (value: number) => value.toFixed(0),
-      },
-      splitLine: { lineStyle: { color: 'rgba(120, 101, 82, 0.12)' } },
+      axisLabel: { color: '#6B7280' },
+      splitLine: { lineStyle: { color: '#EEF2F7' } },
     },
     series: [
-      {
-        name: '支出',
-        type: 'line',
-        smooth: true,
-        data: summary.value.expense_trend.map((item) => Number(item.expense)),
-        areaStyle: { opacity: 0.12 },
-      },
       {
         name: '收入',
         type: 'line',
         smooth: true,
         data: summary.value.expense_trend.map((item) => Number(item.income)),
+        areaStyle: { color: 'rgba(0, 168, 132, 0.12)' },
+      },
+      {
+        name: '支出',
+        type: 'line',
+        smooth: true,
+        data: summary.value.expense_trend.map((item) => Number(item.expense)),
+        areaStyle: { color: 'rgba(239, 68, 68, 0.08)' },
       },
     ],
   })
 
   categoryChart.setOption({
-    color: ['#1f4e5f', '#d96c1f', '#739072', '#b85c38', '#d4a373', '#4b5563'],
-    tooltip: { trigger: 'item' },
-    legend: { bottom: 0, type: 'scroll' },
+    color: ['#00A884', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444', '#14B8A6', '#64748B'],
+    tooltip: { trigger: 'item', formatter: '{b}<br/>¥{c} ({d}%)' },
+    legend: { type: 'scroll', bottom: 0, icon: 'circle' },
     series: [
       {
-        name: '分类支出',
+        name: '支出分类',
         type: 'pie',
-        radius: ['42%', '72%'],
-        center: ['50%', '45%'],
-        avoidLabelOverlap: true,
-        label: {
-          formatter: '{b}\n{d}%',
-        },
+        radius: ['52%', '76%'],
+        center: ['50%', '43%'],
+        label: { formatter: '{b}\n{d}%', color: '#334155' },
         data: summary.value.category_breakdown.map((item) => ({
-          name: item.category_name,
+          name: item.category_name || '未分类',
           value: Number(item.amount),
         })),
       },
@@ -179,19 +195,19 @@ function renderCharts() {
 }
 
 async function loadCategories() {
-  const { data } = await api.get('/categories')
-  categories.value = data.filter((category: Category) => category.is_active)
+  const { data } = await api.get<Category[]>('/categories')
+  categories.value = data.filter((category) => category.is_active)
 }
 
 async function loadImportFiles() {
-  const { data } = await api.get('/imports/files')
+  const { data } = await api.get<ImportFileOption[]>('/imports/files')
   importFiles.value = data
 }
 
 async function loadSummary() {
   loading.value = true
   try {
-    const { data } = await api.get('/dashboard/summary', { params: buildSummaryParams() })
+    const { data } = await api.get<DashboardSummary>('/dashboard/summary', { params: buildSummaryParams() })
     summary.value = data
     await nextTick()
     renderCharts()
@@ -223,16 +239,16 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page-shell">
-    <div class="page-title">
+    <div class="page-heading">
       <div>
-        <h1>Dashboard</h1>
-        <p>按时间范围、分类和导入文件观察收支变化、分类分布和重点商户。</p>
+        <h1>你好，欢迎回来 👋</h1>
+        <p>基于当前账单数据观察收支趋势、分类结构、重点商户与导入任务状态。</p>
       </div>
-      <el-button type="primary" :loading="loading" @click="loadSummary">刷新</el-button>
+      <el-button type="primary" :icon="Refresh" :loading="loading" @click="loadSummary">刷新数据</el-button>
     </div>
 
-    <section class="panel filter-card">
-      <div class="filter-grid">
+    <section class="panel card filter-card">
+      <div class="toolbar-grid filter-grid">
         <el-date-picker
           v-model="filters.date_range"
           type="daterange"
@@ -253,134 +269,105 @@ onBeforeUnmount(() => {
           filterable
           placeholder="选择导入文件"
         >
-          <el-option
-            v-for="file in importFiles"
-            :key="file.id"
-            :label="formatImportFileLabel(file)"
-            :value="file.id"
-          />
+          <el-option v-for="file in importFiles" :key="file.id" :label="formatImportFileLabel(file)" :value="file.id" />
         </el-select>
         <el-button type="primary" :loading="loading" @click="loadSummary">应用筛选</el-button>
         <el-button @click="resetFilters">重置</el-button>
       </div>
     </section>
 
-    <div class="metric-grid metric-grid-wide">
-      <section v-for="metric in metrics" :key="metric.label" class="panel metric-card">
+    <div class="metric-grid">
+      <section v-for="metric in metrics" :key="metric.label" class="panel metric-card" :class="`metric-${metric.tone}`">
         <div class="metric-label">{{ metric.label }}</div>
         <div class="metric-value">{{ metric.value }}</div>
+        <div class="metric-foot">{{ metric.foot }}</div>
       </section>
     </div>
 
     <div class="dashboard-grid">
-      <section class="panel content-card chart-card">
-        <div class="card-head">
-          <h3>收支趋势</h3>
-          <span>按筛选范围展示每日收入与支出</span>
+      <section class="panel card chart-card">
+        <div class="section-title">
+          <h2>收支趋势</h2>
+          <span>按日期统计收入与支出</span>
         </div>
         <div ref="trendChartRef" class="chart-shell"></div>
       </section>
 
-      <section class="panel content-card chart-card">
-        <div class="card-head">
-          <h3>分类占比</h3>
-          <span>查看当前筛选结果中的支出结构</span>
+      <section class="panel card chart-card">
+        <div class="section-title">
+          <h2>支出分类占比</h2>
+          <span>展示当前筛选范围内的支出结构</span>
         </div>
         <div ref="categoryChartRef" class="chart-shell"></div>
       </section>
 
-      <section class="panel content-card">
-        <div class="card-head">
-          <h3>Top 商户</h3>
+      <section class="panel card">
+        <div class="section-title">
+          <h2>TOP 支出商家</h2>
           <span>按支出金额排序</span>
         </div>
-        <el-table :data="summary.top_merchants" size="small">
-          <el-table-column prop="merchant" label="商户" min-width="180" />
-          <el-table-column label="支出金额" width="120">
-            <template #default="{ row }">{{ formatMoney(row.amount) }}</template>
+        <el-table :data="summary.top_merchants" size="small" empty-text="暂无商家数据">
+          <el-table-column type="index" label="#" width="56" />
+          <el-table-column prop="merchant" label="商家" min-width="160" />
+          <el-table-column label="金额" width="130" align="right">
+            <template #default="{ row }">
+              <span class="amount negative">{{ money(row.amount) }}</span>
+            </template>
           </el-table-column>
-          <el-table-column prop="transaction_count" label="笔数" width="90" />
+          <el-table-column prop="transaction_count" label="笔数" width="80" align="right" />
         </el-table>
       </section>
 
-      <section class="panel content-card">
-        <div class="card-head">
-          <h3>分类明细</h3>
-          <span>当前筛选条件下的支出分布</span>
+      <section class="panel card">
+        <div class="section-title">
+          <h2>导入任务状态</h2>
+          <span>最近 5 个批次</span>
         </div>
-        <el-table :data="summary.category_breakdown" size="small">
-          <el-table-column prop="category_name" label="分类" min-width="160" />
-          <el-table-column label="支出金额" width="120">
-            <template #default="{ row }">{{ formatMoney(row.amount) }}</template>
-          </el-table-column>
-          <el-table-column prop="transaction_count" label="笔数" width="90" />
-        </el-table>
+        <div class="job-list">
+          <div v-for="job in summary.recent_jobs" :key="job.id" class="job-item">
+            <div>
+              <strong>批次 #{{ job.id }}</strong>
+              <span>{{ job.processed_count }} / {{ job.total_count || '-' }} 笔</span>
+            </div>
+            <el-progress :percentage="job.progress_percent" :stroke-width="10" />
+            <el-tag :type="jobStatusType(job.status)" class="status-tag">{{ jobStatusText(job.status) }}</el-tag>
+          </div>
+          <el-empty v-if="!summary.recent_jobs.length" description="暂无导入任务" :image-size="88" />
+        </div>
       </section>
     </div>
-
-    <section class="panel content-card jobs-card">
-      <div class="card-head">
-        <h3>最近导入任务</h3>
-        <span>导入和分类任务的最新状态</span>
-      </div>
-      <el-table :data="summary.recent_jobs" size="small">
-        <el-table-column prop="id" label="批次" width="80" />
-        <el-table-column prop="status" label="状态" width="120" />
-        <el-table-column label="进度" min-width="220">
-          <template #default="{ row }">
-            <el-progress :percentage="row.progress_percent" :stroke-width="12" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="source_count" label="文件数" width="90" />
-      </el-table>
-    </section>
   </div>
 </template>
 
 <style scoped>
-.filter-card {
-  padding: 20px;
-}
-
 .filter-grid {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.2fr) minmax(180px, 0.8fr) minmax(260px, 1.6fr) 120px 100px;
-  gap: 12px;
+  grid-template-columns: minmax(260px, 1.1fr) minmax(170px, 0.8fr) minmax(280px, 1.3fr) 108px 88px;
 }
 
-.metric-grid-wide {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+.metric-card {
+  border-left: 4px solid transparent;
+}
+
+.metric-positive {
+  border-left-color: var(--color-success);
+}
+
+.metric-negative {
+  border-left-color: var(--color-error);
+}
+
+.metric-primary {
+  border-left-color: var(--color-primary);
+}
+
+.metric-warning {
+  border-left-color: var(--color-warning);
 }
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
   gap: 16px;
-}
-
-.content-card {
-  padding: 20px;
-}
-
-.chart-card {
-  padding-bottom: 12px;
-}
-
-.card-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.card-head h3 {
-  margin: 0;
-}
-
-.card-head span {
-  color: var(--muted);
-  font-size: 13px;
 }
 
 .chart-shell {
@@ -388,16 +375,34 @@ onBeforeUnmount(() => {
   height: 320px;
 }
 
-.jobs-card {
-  margin-top: 16px;
+.job-list {
+  display: grid;
+  gap: 12px;
 }
 
-@media (max-width: 1100px) {
-  .filter-grid {
-    grid-template-columns: 1fr 1fr;
-  }
+.job-item {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 90px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
 
-  .metric-grid-wide {
+.job-item strong,
+.job-item span {
+  display: block;
+}
+
+.job-item span {
+  margin-top: 4px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+  .filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -408,13 +413,8 @@ onBeforeUnmount(() => {
 
 @media (max-width: 720px) {
   .filter-grid,
-  .metric-grid-wide {
+  .job-item {
     grid-template-columns: 1fr;
-  }
-
-  .card-head {
-    flex-direction: column;
-    align-items: flex-start;
   }
 }
 </style>
