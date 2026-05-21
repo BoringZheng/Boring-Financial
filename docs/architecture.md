@@ -28,7 +28,7 @@ flowchart LR
 前端入口位于 `frontend/src`。
 
 - `layouts/AppLayout.vue`: 深色侧边栏、顶部栏、用户区和主工作台布局。
-- `pages/LoginPage.vue`: 登录/注册。
+- `pages/LoginPage.vue`: 登录/注册，深色品牌区 + 白色卡片布局。
 - `pages/DashboardPage.vue`: 财务驾驶舱，复用 `/dashboard/summary`。
 - `pages/ImportsPage.vue`: 账单上传、导入记录、批次进度和批次删除。
 - `pages/TransactionsPage.vue`: 交易筛选、分页表格和详情抽屉。
@@ -51,7 +51,8 @@ flowchart LR
 
 后端入口位于 `backend/src/backend`。
 
-- `api/routes_auth.py`: 注册、登录、当前用户。
+- `api/dependencies.py`: JWT 鉴权依赖注入，获取当前用户和数据库会话。
+- `api/routes_auth.py`: 注册、登录、登出、当前用户。
 - `api/routes_categories.py`: 分类查询、新增、更新。
 - `api/routes_imports.py`: 上传文件、导入批次、上传文件列表、批次删除。
 - `api/routes_transactions.py`: 交易分页查询和人工分类修正。
@@ -61,7 +62,8 @@ flowchart LR
 - `services/imports.py`: 导入批次创建、文件保存、解析和交易落库。
 - `services/classifiers.py`: 规则、缓存、外部模型、本地模型与混合分类链路。
 - `services/analytics.py`: Dashboard 聚合。
-- `services/reports.py`: PDF 报表构建。
+- `services/reports.py`: PDF 报表构建，含 Unicode 字体自动检测。
+- `services/bootstrap.py`: 启动时初始化默认分类和 `category_map.csv` 规则种子。
 
 ## 4. 核心数据流
 

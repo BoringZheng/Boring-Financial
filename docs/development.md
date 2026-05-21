@@ -24,8 +24,8 @@ scripts/   本地开发与部署辅助脚本
 
 - `backend/pyproject.toml`: 后端包元数据和依赖声明。
 - `backend/uv.lock`: 后端依赖锁文件，开发安装以它为准。
-- `backend/src/backend/api/`: HTTP 路由。
-- `backend/src/backend/services/`: 核心业务逻辑。
+- `backend/src/backend/api/`: HTTP 路由和 JWT 鉴权依赖。
+- `backend/src/backend/services/`: 核心业务逻辑，含启动引导（`bootstrap.py`）自动初始化默认分类和规则种子。
 - `backend/src/backend/models/`: SQLAlchemy 数据模型。
 - `backend/src/backend/schemas/`: Pydantic 请求/响应模型。
 - `backend/src/backend/tasks/`: Celery 任务入口。

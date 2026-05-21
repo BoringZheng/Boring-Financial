@@ -62,6 +62,7 @@ cp infra/.env.example infra/.env.server
 - `POSTGRES_DB`
 - `POSTGRES_USER`
 - `POSTGRES_PASSWORD`
+- `SECRET_KEY`：JWT 签名密钥，生产环境务必修改。注意 `infra/.env.example` 不包含此项，需手动添加到 `.env.server` 并在 `docker-compose.yml` 的 `backend` 和 `worker` 服务中引用（默认 `docker-compose.yml` 未传递此变量，后端使用硬编码默认值 `change-me`）。
 - `OPENAI_API_KEY`
 - `CLASSIFICATION_PROVIDER`
 - `CORS_ORIGINS`
