@@ -8,6 +8,7 @@ import {
   Files,
   FolderChecked,
   HomeFilled,
+  MagicStick,
   Search,
   Setting,
   SwitchButton,
@@ -26,6 +27,7 @@ const menuItems = [
   { path: '/review', label: 'Review', subLabel: '分类校正', icon: FolderChecked },
   { path: '/categories', label: 'Categories', subLabel: '分类管理', icon: Document },
   { path: '/reports', label: 'Reports', subLabel: '报表中心', icon: DataAnalysis },
+  { path: '/personality', label: 'Personality', subLabel: '消费人格', icon: MagicStick },
   { path: '/settings', label: 'Settings', subLabel: '系统设置', icon: Setting },
 ]
 
