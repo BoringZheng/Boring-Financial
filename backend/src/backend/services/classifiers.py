@@ -136,7 +136,8 @@ class OpenAICompatibleClassifier:
                     "你是账单分类助手。根据 merchant_text 和 summary_text 快速判断消费场景。"
                     "优先看商户和摘要，不输出思考过程，不解释废话。"
                     "如果 merchant_text 与 summary_text 冲突，采用更具体的一方。"
-                    "只输出严格 JSON：category, subcategory, confidence, reason。"
+                    "只输出严格 JSON 对象，不要包含在代码块中，不要添加任何其他文本。"
+                    '样例输出：{"category": "餐饮", "subcategory": "快餐", "confidence": 0.95, "reason": "肯德基商户"}'
                     "reason 必须非常短，控制在 12 个汉字以内。"
                 ),
             },
@@ -185,7 +186,23 @@ class OpenAICompatibleClassifier:
                 response = client.post("/chat/completions", json=payload)
                 response.raise_for_status()
                 data = response.json()
-                return data["choices"][0]["message"]["content"]
+                choice = data["choices"][0]
+                content = choice["message"]["content"]
+                finish = choice.get("finish_reason", "")
+
+                # DeepSeek json_object known issue: occasionally returns empty content
+                if not content.strip():
+                    if "response_format" in payload:
+                        payload.pop("response_format")
+                        continue
+                    break
+
+                # Output was truncated — double max_tokens and retry
+                if finish == "length":
+                    payload["max_tokens"] = payload["max_tokens"] * 2
+                    continue
+
+                return content
             except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
                 last_error = exc
                 if attempt >= settings.model_max_retries:
@@ -196,10 +213,31 @@ class OpenAICompatibleClassifier:
         ) from last_error
 
     def _parse_response(self, response_text: str) -> dict:
+        stripped = response_text.strip()
+
+        # 1. Try extracting JSON from markdown code fence (```json / ```)
+        fence_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", stripped, re.DOTALL)
+        if fence_match:
+            try:
+                return json.loads(fence_match.group(1).strip())
+            except json.JSONDecodeError:
+                pass
+
+        # 2. Try finding a JSON object in the text (model may have added surrounding text)
+        brace_match = re.search(r"\{.*\}", stripped, re.DOTALL)
+        if brace_match:
+            try:
+                return json.loads(brace_match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        # 3. Direct parse
         try:
-            return json.loads(response_text)
+            return json.loads(stripped)
         except json.JSONDecodeError:
-            return {"category": "未分类", "subcategory": None, "confidence": 0.3, "reason": response_text}
+            pass
+
+        return {"category": "未分类", "subcategory": None, "confidence": 0.3, "reason": response_text}
 
     @staticmethod
     def _coerce_confidence(value: object) -> float:
@@ -248,12 +286,13 @@ class CompositeClassifier:
         )
 
     def _classify_with_provider(
-        self, db: Session, transaction: Transaction, user_id: int, provider_name: str, auto_commit: bool = True
+        self, db: Session, transaction: Transaction, user_id: int, provider_name: str, auto_commit: bool = True, *, force_refresh: bool = False
     ) -> ClassificationOutput:
-        cached_output = self._cached_output(db, user_id, transaction, provider_name)
-        if cached_output is not None:
-            self._store_result(db, transaction, cached_output, auto_commit=auto_commit)
-            return cached_output
+        if not force_refresh:
+            cached_output = self._cached_output(db, user_id, transaction, provider_name)
+            if cached_output is not None:
+                self._store_result(db, transaction, cached_output, auto_commit=auto_commit)
+                return cached_output
 
         if provider_name == "local_model":
             model_output = self.local_classifier.classify(db, transaction, user_id)
@@ -291,11 +330,13 @@ class CompositeClassifier:
         user_id: int,
         provider_override: str | None = None,
         auto_commit: bool = True,
+        *,
+        force_refresh: bool = False,
     ) -> ClassificationOutput:
         if provider_override in {"openai_compatible_api", "local_model"}:
             try:
                 output = self._classify_with_provider(
-                    db, transaction, user_id, provider_override, auto_commit=auto_commit
+                    db, transaction, user_id, provider_override, auto_commit=auto_commit, force_refresh=force_refresh
                 )
                 if output.category_id is not None:
                     return output
@@ -317,7 +358,7 @@ class CompositeClassifier:
 
         try:
             model_output = self._classify_with_provider(
-                db, transaction, user_id, "openai_compatible_api", auto_commit=auto_commit
+                db, transaction, user_id, "openai_compatible_api", auto_commit=auto_commit, force_refresh=force_refresh
             )
             if model_output.category_id is not None:
                 return model_output
@@ -410,6 +451,8 @@ def classify_transaction(
     user_id: int,
     provider_override: str | None = None,
     auto_commit: bool = True,
+    *,
+    force_refresh: bool = False,
 ) -> ClassificationOutput:
     if provider_override == "rule":
         result = RuleBasedClassifier().classify(db, transaction, user_id)
@@ -420,10 +463,10 @@ def classify_transaction(
         return result
     if provider_override in {"openai_compatible_api", "local_model"}:
         return CompositeClassifier().classify(
-            db, transaction, user_id, provider_override=provider_override, auto_commit=auto_commit
+            db, transaction, user_id, provider_override=provider_override, auto_commit=auto_commit, force_refresh=force_refresh
         )
     if settings.classification_provider == "local_model":
         return CompositeClassifier().classify(
-            db, transaction, user_id, provider_override="local_model", auto_commit=auto_commit
+            db, transaction, user_id, provider_override="local_model", auto_commit=auto_commit, force_refresh=force_refresh
         )
-    return CompositeClassifier().classify(db, transaction, user_id, provider_override=None, auto_commit=auto_commit)
+    return CompositeClassifier().classify(db, transaction, user_id, provider_override=None, auto_commit=auto_commit, force_refresh=force_refresh)

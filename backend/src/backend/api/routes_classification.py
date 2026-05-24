@@ -26,7 +26,7 @@ def reclassify(
     failures: list[dict] = []
     for transaction in transactions:
         try:
-            classify_transaction(db, transaction, current_user.id, provider_override=payload.provider)
+            classify_transaction(db, transaction, current_user.id, provider_override=payload.provider, force_refresh=True)
             processed += 1
         except Exception as exc:
             failed += 1
