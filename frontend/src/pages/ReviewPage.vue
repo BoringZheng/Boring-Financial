@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Check, Close, MagicStick, Refresh, Select } from '@element-plus/icons-vue'
 import api from '../api/client'
@@ -38,6 +39,7 @@ const categories = ref<Category[]>([])
 const selectedId = ref<number | null>(null)
 const submittingReview = ref(false)
 const reclassifying = ref(false)
+const route = useRoute()
 const reviewForm = reactive({
   categoryId: undefined as number | undefined,
 })
@@ -96,7 +98,20 @@ async function load() {
   try {
     const { data } = await api.get<TransactionListResponse>('/transactions', { params: { needs_review: true, page_size: 100 } })
     rows.value = data.items
-    if (!rows.value.some((row) => row.id === selectedId.value)) {
+
+    const targetId = route.query.id
+    if (targetId != null) {
+      const numericId = Number(targetId)
+      if (!Number.isNaN(numericId) && !rows.value.some((row) => row.id === numericId)) {
+        try {
+          const { data: single } = await api.get<TransactionRow>(`/transactions/${numericId}`)
+          rows.value.unshift(single)
+        } catch {
+          // transaction not found or inaccessible — ignore
+        }
+      }
+      selectedId.value = numericId
+    } else if (!rows.value.some((row) => row.id === selectedId.value)) {
       selectedId.value = rows.value[0]?.id ?? null
     }
   } finally {

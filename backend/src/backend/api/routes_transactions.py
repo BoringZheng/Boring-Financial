@@ -66,6 +66,18 @@ def list_transactions(
     return TransactionListResponse(items=[TransactionRead.model_validate(item) for item in items], total=total)
 
 
+@router.get("/{transaction_id}", response_model=TransactionRead)
+def get_transaction(
+    transaction_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> TransactionRead:
+    transaction = db.get(Transaction, transaction_id)
+    if transaction is None or transaction.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="transaction not found")
+    return TransactionRead.model_validate(transaction)
+
+
 @router.patch("/{transaction_id}/category", response_model=TransactionRead)
 def update_transaction_category(
     transaction_id: int,

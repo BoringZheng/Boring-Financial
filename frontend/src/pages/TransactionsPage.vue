@@ -165,8 +165,8 @@ function openDetail(row: TransactionRow) {
   detailDrawerVisible.value = true
 }
 
-function goReview() {
-  router.push('/review')
+function goReview(row: TransactionRow) {
+  router.push({ path: '/review', query: { id: row.id } })
 }
 
 onMounted(async () => {
@@ -256,7 +256,7 @@ onMounted(async () => {
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button :icon="View" circle text @click="openDetail(row)" />
-            <el-button :icon="EditPen" circle text type="primary" @click="goReview" />
+            <el-button :icon="EditPen" circle text type="primary" @click="goReview(row)" />
           </template>
         </el-table-column>
       </el-table>
