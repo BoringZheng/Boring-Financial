@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -47,7 +48,25 @@ async def lifespan(_: FastAPI):
         seed_defaults(db)
     finally:
         db.close()
+
+    # Migrate existing timeout transactions into the retry queue
+    from backend.services.retry_queue import migrate_existing_timeouts, run_retry_queue_worker
+    migrate_existing_timeouts()
+
+    # Start background retry worker
+    stop_event = threading.Event()
+    worker = threading.Thread(
+        target=run_retry_queue_worker,
+        args=(stop_event,),
+        daemon=True,
+        name="retry-queue-worker",
+    )
+    worker.start()
+
     yield
+
+    # Shutdown
+    stop_event.set()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
