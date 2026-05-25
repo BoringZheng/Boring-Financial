@@ -175,14 +175,16 @@ class OpenAICompatibleClassifier:
         return " | ".join(part for part in parts if part) or "无摘要"
 
     def _call_model(self, messages: list[dict]) -> str:
-        payload = {
+        payload: dict = {
             "model": self.model,
             "temperature": 0,
             "top_p": 0.1,
-            "max_tokens": min(settings.model_max_output_tokens, 80),
+            "max_tokens": settings.model_max_output_tokens,
             "response_format": {"type": "json_object"},
             "messages": messages,
         }
+        if settings.model_disable_thinking:
+            payload["thinking"] = {"type": "disabled"}
         client = get_http_client(self.api_base, self.api_key, self.timeout)
         last_error: Exception | None = None
         for attempt in range(settings.model_max_retries + 1):

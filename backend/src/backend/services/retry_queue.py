@@ -60,7 +60,10 @@ def run_retry_queue_worker(stop_event: threading.Event) -> None:
             ).first()
 
             if txn is None:
-                # Queue is empty — wait before polling again
+                # Queue is empty — check for retry_failed txns to auto-requeue
+                requeued = auto_requeue_failed()
+                if requeued > 0:
+                    continue  # immediately pick up the newly requeued txns
                 stop_event.wait(settings.retry_queue_poll_seconds)
                 continue
 
@@ -158,5 +161,38 @@ def requeue_all_external_api_failures(
         db.commit()
         logger.info("Requeued %d transactions into retry queue", total)
         return total
+    finally:
+        db.close()
+
+
+def auto_requeue_failed() -> int:
+    """Periodic scan: move retry_failed transactions back to the retry queue
+    after they have been sitting for *retry_queue_auto_requeue_minutes*.
+    Resets api_retry_count so they get a fresh round of attempts."""
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=settings.retry_queue_auto_requeue_minutes)
+    db = SessionLocal()
+    try:
+        txns = db.scalars(
+            select(Transaction).where(
+                Transaction.auto_provider == RETRY_FAILED_PROVIDER,
+                Transaction.updated_at <= cutoff,
+            )
+        ).all()
+
+        if not txns:
+            return 0
+
+        for txn in txns:
+            txn.auto_provider = RETRY_QUEUE_PROVIDER
+            txn.needs_review = False
+            txn.api_retry_count = 0
+            txn.api_retry_provider = txn.api_retry_provider or DEFAULT_EXTERNAL_PROVIDER
+            txn.api_retry_last_error = None
+
+        db.commit()
+        logger.info("Auto-requeued %d retry_failed transactions", len(txns))
+        return len(txns)
     finally:
         db.close()

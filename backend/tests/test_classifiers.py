@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from backend.db.base_class import Base
 from backend.models import Category, ClassificationCache, Transaction, User
 from backend.models import Transaction
+from backend.core.config import settings
 from backend.services import classifiers as classifiers_module
 from backend.services.classifiers import (
     RETRY_FAILED_PROVIDER,
@@ -114,8 +115,9 @@ def test_call_model_limits_output_tokens(monkeypatch) -> None:
 
     classifier._call_model([{"role": "user", "content": "test"}])
 
-    assert captured_payload["max_tokens"] == 80
+    assert captured_payload["max_tokens"] == settings.model_max_output_tokens
     assert captured_payload["top_p"] == 0.1
+    assert captured_payload.get("thinking") == {"type": "disabled"}
 
 
 def test_duplicate_cache_insert_does_not_poison_session() -> None:
