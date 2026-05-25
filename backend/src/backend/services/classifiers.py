@@ -303,6 +303,31 @@ class CompositeClassifier:
         self._store_result(db, transaction, model_output, auto_commit=auto_commit)
         return model_output
 
+    def _queue_for_retry(
+        self, db: Session, transaction: Transaction, exc: Exception, auto_commit: bool
+    ) -> ClassificationOutput | None:
+        """Queue tx for background retry if under limit. Returns None if limit reached."""
+        if transaction.api_retry_count >= settings.retry_queue_max_retries:
+            return None
+        transaction.api_retry_count += 1
+        transaction.auto_provider = "retry_queue"
+        transaction.auto_reason = (
+            f"external api timeout, retry {transaction.api_retry_count}"
+            f"/{settings.retry_queue_max_retries}: {exc}"
+        )
+        transaction.auto_confidence = Decimal("0.0")
+        transaction.needs_review = False
+        if auto_commit:
+            db.commit()
+        return ClassificationOutput(
+            category_id=None,
+            subcategory_name=None,
+            confidence=0.0,
+            reason=f"queued for retry ({transaction.api_retry_count}/{settings.retry_queue_max_retries})",
+            provider="retry_queue",
+            raw_response=None,
+        )
+
     def _rule_fallback(
         self, db: Session, transaction: Transaction, user_id: int, fallback_reason: str, auto_commit: bool = True
     ) -> ClassificationOutput:
@@ -348,6 +373,9 @@ class CompositeClassifier:
                     auto_commit=auto_commit,
                 )
             except Exception as exc:
+                queued = self._queue_for_retry(db, transaction, exc, auto_commit)
+                if queued is not None:
+                    return queued
                 return self._rule_fallback(
                     db,
                     transaction,
@@ -363,6 +391,9 @@ class CompositeClassifier:
             if model_output.category_id is not None:
                 return model_output
         except Exception as exc:
+            queued = self._queue_for_retry(db, transaction, exc, auto_commit)
+            if queued is not None:
+                return queued
             fallback_reason = f"external api failed: {exc}"
         else:
             fallback_reason = "external api returned no valid category"
