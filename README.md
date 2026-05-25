@@ -30,9 +30,11 @@ flowchart LR
     B --> P["PostgreSQL / SQLite"]
     B --> R["Redis"]
     B --> W["Celery Worker"]
+    B --> Q["Retry Queue Worker"]
     W --> P
-    B --> A["OpenAI-Compatible API"]
-    B --> M["Local Model Service / vLLM"]
+    Q --> P
+    Q --> A["OpenAI-Compatible API"]
+    Q --> M["Local Model Service / vLLM"]
 ```
 
 ## 技术栈
@@ -41,6 +43,13 @@ flowchart LR
 - Frontend: Vue 3, TypeScript, Vite, Pinia, Vue Router, Element Plus, ECharts
 - AI: Rule-based classifier, OpenAI-compatible provider, local model provider
 - Deployment: Docker Compose, Nginx, bare-metal systemd/Nginx
+
+## 外部模型重试池
+
+- 导入和重分类不会在用户请求线程中并发访问外部模型；外部模型任务先写入 `retry_queue`，由后端启动的 retry queue worker 统一串行发送。
+- `retry_queue` 表示等待后台重试，`retry_failed` 表示超时重试次数耗尽且不会进入人工校正列表。
+- 管理员可在系统设置页一键把历史超时/重试失败交易重新放回池子，也可运行 `bf-admin retry-all`。
+- 首次使用后台管理员按钮前，运行 `bf-admin make-admin <username>` 给账号授权。
 
 ## 快速启动
 

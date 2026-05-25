@@ -21,6 +21,7 @@ class UserRead(BaseModel):
     username: str
     email: str | None
     is_active: bool
+    is_admin: bool
 
     model_config = {"from_attributes": True}
 

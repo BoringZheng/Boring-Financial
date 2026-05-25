@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import api from '../api/client'
+import { useAuthStore } from '../stores/auth'
 
 const settingsForm = reactive({
   provider: 'composite',
@@ -9,6 +12,20 @@ const settingsForm = reactive({
 })
 
 const thresholdText = computed(() => `${Math.round(settingsForm.lowConfidenceThreshold * 100)}%`)
+const auth = useAuthStore()
+const retryingAll = ref(false)
+
+async function retryAllTimeouts() {
+  retryingAll.value = true
+  try {
+    const { data } = await api.post<{ queued: number }>('/classification/retry-all', {})
+    ElMessage.success(`已放回重试池 ${data.queued} 笔`)
+  } catch {
+    ElMessage.error('重试池操作失败，请确认当前账号有管理员权限')
+  } finally {
+    retryingAll.value = false
+  }
+}
 </script>
 
 <template>
@@ -55,6 +72,10 @@ const thresholdText = computed(() => `${Math.round(settingsForm.lowConfidenceThr
           <h2>运行模式</h2>
           <el-tag type="success">轻量</el-tag>
         </div>
+        <div v-if="auth.user?.is_admin" class="admin-actions">
+          <strong>超时重试池</strong>
+          <el-button type="primary" :loading="retryingAll" @click="retryAllTimeouts">一键重试历史超时</el-button>
+        </div>
         <div class="mode-list">
           <div>
             <strong>前端增强优先</strong>
@@ -96,6 +117,16 @@ const thresholdText = computed(() => `${Math.round(settingsForm.lowConfidenceThr
 .mode-list {
   display: grid;
   gap: 12px;
+}
+
+.admin-actions {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #f8fafc;
 }
 
 .mode-list div {

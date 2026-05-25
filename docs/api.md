@@ -37,7 +37,8 @@ Authorization: Bearer <access_token>
     "id": 1,
     "username": "boring",
     "email": "boring@example.com",
-    "is_active": true
+    "is_active": true,
+    "is_admin": false
   }
 }
 ```
@@ -66,7 +67,8 @@ Authorization: Bearer <access_token>
     "id": 1,
     "username": "boring",
     "email": "boring@example.com",
-    "is_active": true
+    "is_active": true,
+    "is_admin": false
   }
 }
 ```
@@ -100,7 +102,8 @@ Authorization: Bearer <access_token>
   "id": 1,
   "username": "boring",
   "email": "boring@example.com",
-  "is_active": true
+  "is_active": true,
+  "is_admin": false
 }
 ```
 
@@ -343,6 +346,32 @@ files=<alipay.xlsx>
 - `openai_compatible_api`
 - `local_model`
 - `composite`
+
+说明：
+- `openai_compatible_api`、`local_model` 和默认 `composite` 的外部模型请求会先进入统一重试池，接口返回的 `processed` 表示已成功入队或命中缓存，不代表模型请求已同步完成。
+- 交易的 `auto_provider` 可能为 `retry_queue`（等待后台重试）或 `retry_failed`（超时重试耗尽，等待管理员重新入池）。
+
+### `POST /api/classification/retry-all`
+
+管理员接口。将历史外部 API 超时、等待重试或重试失败的交易重新放入统一重试池。请求体可为空对象；传入 `user_id` 时只处理该用户。
+
+请求：
+```json
+{
+  "user_id": 1
+}
+```
+
+响应：
+```json
+{
+  "queued": 12
+}
+```
+
+权限：
+- 需要 Bearer token。
+- 当前用户必须 `is_admin = true`，否则返回 `403`。
 
 ## 7. Dashboard
 

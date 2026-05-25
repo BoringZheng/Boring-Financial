@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     model_timeout_seconds: float = 30.0
     model_connect_timeout_seconds: float = 5.0
     model_max_retries: int = 2
-    model_max_output_tokens: int = 300
+    model_max_output_tokens: int = 80
     import_classification_workers: int = 2
     import_progress_commit_interval: int = 10
     local_model_api_base: str = "http://model-service:8001/v1"

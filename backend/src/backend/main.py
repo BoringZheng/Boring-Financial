@@ -5,36 +5,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
 
 from backend.api.router import api_router
 from backend.core.config import settings
 from backend.db.base import Base
+from backend.db.runtime_schema import ensure_runtime_schema
 from backend.db.session import engine, SessionLocal
 from backend.services.bootstrap import seed_defaults
-
-
-def ensure_runtime_schema() -> None:
-    inspector = inspect(engine)
-    if "import_batches" not in inspector.get_table_names():
-        return
-
-    columns = {column["name"] for column in inspector.get_columns("import_batches")}
-    statements: list[str] = []
-    if "total_count" not in columns:
-        statements.append("ALTER TABLE import_batches ADD COLUMN total_count INTEGER DEFAULT 0 NOT NULL")
-
-    if "transactions" in inspector.get_table_names():
-        txn_columns = {column["name"] for column in inspector.get_columns("transactions")}
-        if "api_retry_count" not in txn_columns:
-            statements.append("ALTER TABLE transactions ADD COLUMN api_retry_count INTEGER DEFAULT 0 NOT NULL")
-
-    if not statements:
-        return
-
-    with engine.begin() as connection:
-        for statement in statements:
-            connection.execute(text(statement))
 
 
 @asynccontextmanager
@@ -67,6 +44,7 @@ async def lifespan(_: FastAPI):
 
     # Shutdown
     stop_event.set()
+    worker.join(timeout=5)
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

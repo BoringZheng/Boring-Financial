@@ -140,9 +140,13 @@ uv run pytest
 uv run pytest --cov=backend
 uv run alembic upgrade head
 uv run celery -A backend.core.celery_app.celery_app worker -l info
+uv run bf-admin retry-all
+uv run bf-admin make-admin <username>
 ```
 
 说明：当前本地快速启动不强制要求 Alembic migration，因为 `backend.main` 的 lifespan 会调用 SQLAlchemy metadata 创建运行期表。Alembic 保留给后续正式迁移版本管理。
+
+外部模型请求默认进入统一 `retry_queue`，由后端 lifespan 中启动的后台 worker 串行发送。开发时如果看到交易来源为 `retry_queue`，表示等待后台处理；`retry_failed` 表示超时重试耗尽。管理员可在设置页点击“一键重试历史超时”，或运行 `uv run bf-admin retry-all`。首次使用后台管理员按钮前，运行 `uv run bf-admin make-admin <username>`。
 
 ## 5. 前端本地开发
 

@@ -87,6 +87,15 @@ CLASSIFICATION_PROVIDER=composite
 
 如使用 PostgreSQL，请将 `DATABASE_URL` 改为 PostgreSQL 连接串。
 
+外部模型请求由后端进程内的 retry queue worker 统一串行发送。裸机部署建议保持一个 `uvicorn backend.main:app` 服务实例；如果改成多进程或多台后端，需要先把 retry worker 拆成唯一实例或增加数据库锁，避免再次形成多个外部模型发送者。
+
+管理员命令：
+```bash
+cd /opt/Boring-Financial/backend
+uv run bf-admin make-admin <username>
+uv run bf-admin retry-all
+```
+
 ## 6. systemd 服务
 
 参考模板：

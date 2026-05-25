@@ -78,6 +78,15 @@ CLASSIFICATION_PROVIDER=composite
 
 如暂时不接真实模型，可保持 mock `model-service`。
 
+外部模型请求由 `backend` 服务中的 retry queue worker 统一串行发送，不由用户请求线程或导入线程并发发送。生产环境如果水平扩展多个 `backend` 副本，需要把 retry worker 拆成单独唯一实例或增加数据库锁，否则多个后端进程会形成多个发送者。
+
+管理员运维命令：
+```bash
+cd backend
+uv run bf-admin make-admin <username>
+uv run bf-admin retry-all
+```
+
 ## 5. 启动服务
 
 CPU / mock model 部署：

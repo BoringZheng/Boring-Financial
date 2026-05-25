@@ -18,6 +18,10 @@ from backend.models import Category, CategoryRule, ClassificationCache, Classifi
 from backend.utils.normalizers import build_classification_hash, normalize_text
 
 PROMPT_VERSION = "v2"
+EXTERNAL_MODEL_PROVIDERS = {"openai_compatible_api", "local_model"}
+RETRY_QUEUE_PROVIDER = "retry_queue"
+RETRY_FAILED_PROVIDER = "retry_failed"
+DEFAULT_EXTERNAL_PROVIDER = "openai_compatible_api"
 
 
 @dataclass
@@ -175,7 +179,7 @@ class OpenAICompatibleClassifier:
             "model": self.model,
             "temperature": 0,
             "top_p": 0.1,
-            "max_tokens": settings.model_max_output_tokens,
+            "max_tokens": min(settings.model_max_output_tokens, 80),
             "response_format": {"type": "json_object"},
             "messages": messages,
         }
@@ -303,14 +307,57 @@ class CompositeClassifier:
         self._store_result(db, transaction, model_output, auto_commit=auto_commit)
         return model_output
 
+    def _enqueue_external_classification(
+        self,
+        db: Session,
+        transaction: Transaction,
+        provider_name: str,
+        auto_commit: bool,
+        *,
+        reset_retry_count: bool = True,
+    ) -> ClassificationOutput:
+        if reset_retry_count:
+            transaction.api_retry_count = 0
+        transaction.api_retry_provider = provider_name
+        transaction.api_retry_last_error = None
+        transaction.auto_category_id = None
+        transaction.auto_subcategory_name = None
+        transaction.auto_confidence = Decimal("0.0")
+        transaction.auto_provider = RETRY_QUEUE_PROVIDER
+        transaction.auto_reason = f"queued for external model classification: {provider_name}"
+        transaction.needs_review = False
+        if auto_commit:
+            db.commit()
+        return ClassificationOutput(
+            category_id=None,
+            subcategory_name=None,
+            confidence=0.0,
+            reason=transaction.auto_reason,
+            provider=RETRY_QUEUE_PROVIDER,
+            raw_response=None,
+        )
+
+    @staticmethod
+    def _is_retryable_external_error(exc: Exception) -> bool:
+        current: BaseException | None = exc
+        while current is not None:
+            if isinstance(current, (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.PoolTimeout)):
+                return True
+            current = current.__cause__
+        return False
+
     def _queue_for_retry(
-        self, db: Session, transaction: Transaction, exc: Exception, auto_commit: bool
+        self, db: Session, transaction: Transaction, provider_name: str, exc: Exception, auto_commit: bool
     ) -> ClassificationOutput | None:
         """Queue tx for background retry if under limit. Returns None if limit reached."""
-        if transaction.api_retry_count >= settings.retry_queue_max_retries:
+        if not self._is_retryable_external_error(exc):
             return None
         transaction.api_retry_count += 1
-        transaction.auto_provider = "retry_queue"
+        transaction.api_retry_last_error = str(exc)
+        transaction.api_retry_provider = provider_name
+        if transaction.api_retry_count >= settings.retry_queue_max_retries:
+            return None
+        transaction.auto_provider = RETRY_QUEUE_PROVIDER
         transaction.auto_reason = (
             f"external api timeout, retry {transaction.api_retry_count}"
             f"/{settings.retry_queue_max_retries}: {exc}"
@@ -324,9 +371,37 @@ class CompositeClassifier:
             subcategory_name=None,
             confidence=0.0,
             reason=f"queued for retry ({transaction.api_retry_count}/{settings.retry_queue_max_retries})",
-            provider="retry_queue",
+            provider=RETRY_QUEUE_PROVIDER,
             raw_response=None,
         )
+
+    def _mark_retry_failed(
+        self, db: Session, transaction: Transaction, provider_name: str, exc: Exception, auto_commit: bool
+    ) -> ClassificationOutput:
+        reason = f"external api retry exhausted after {transaction.api_retry_count} attempts: {exc}"
+        transaction.auto_category_id = None
+        transaction.auto_subcategory_name = None
+        transaction.auto_confidence = Decimal("0.0")
+        transaction.auto_provider = RETRY_FAILED_PROVIDER
+        transaction.auto_reason = reason
+        transaction.api_retry_provider = provider_name
+        transaction.api_retry_last_error = str(exc)
+        transaction.needs_review = False
+        db.add(
+            ClassificationResult(
+                transaction_id=transaction.id,
+                category_id=None,
+                subcategory_name=None,
+                confidence=Decimal("0.0"),
+                reason=reason,
+                provider=RETRY_FAILED_PROVIDER,
+                prompt_version=PROMPT_VERSION,
+                raw_response=None,
+            )
+        )
+        if auto_commit:
+            db.commit()
+        return ClassificationOutput(None, None, 0.0, reason, RETRY_FAILED_PROVIDER)
 
     def _rule_fallback(
         self, db: Session, transaction: Transaction, user_id: int, fallback_reason: str, auto_commit: bool = True
@@ -357,8 +432,16 @@ class CompositeClassifier:
         auto_commit: bool = True,
         *,
         force_refresh: bool = False,
+        enqueue_external: bool = True,
     ) -> ClassificationOutput:
-        if provider_override in {"openai_compatible_api", "local_model"}:
+        if provider_override in EXTERNAL_MODEL_PROVIDERS:
+            if enqueue_external:
+                if not force_refresh:
+                    cached_output = self._cached_output(db, user_id, transaction, provider_override)
+                    if cached_output is not None:
+                        self._store_result(db, transaction, cached_output, auto_commit=auto_commit)
+                        return cached_output
+                return self._enqueue_external_classification(db, transaction, provider_override, auto_commit)
             try:
                 output = self._classify_with_provider(
                     db, transaction, user_id, provider_override, auto_commit=auto_commit, force_refresh=force_refresh
@@ -373,9 +456,11 @@ class CompositeClassifier:
                     auto_commit=auto_commit,
                 )
             except Exception as exc:
-                queued = self._queue_for_retry(db, transaction, exc, auto_commit)
+                queued = self._queue_for_retry(db, transaction, provider_override, exc, auto_commit)
                 if queued is not None:
                     return queued
+                if self._is_retryable_external_error(exc):
+                    return self._mark_retry_failed(db, transaction, provider_override, exc, auto_commit)
                 return self._rule_fallback(
                     db,
                     transaction,
@@ -384,16 +469,26 @@ class CompositeClassifier:
                     auto_commit=auto_commit,
                 )
 
+        if enqueue_external:
+            if not force_refresh:
+                cached_output = self._cached_output(db, user_id, transaction, DEFAULT_EXTERNAL_PROVIDER)
+                if cached_output is not None:
+                    self._store_result(db, transaction, cached_output, auto_commit=auto_commit)
+                    return cached_output
+            return self._enqueue_external_classification(db, transaction, DEFAULT_EXTERNAL_PROVIDER, auto_commit)
+
         try:
             model_output = self._classify_with_provider(
-                db, transaction, user_id, "openai_compatible_api", auto_commit=auto_commit, force_refresh=force_refresh
+                db, transaction, user_id, DEFAULT_EXTERNAL_PROVIDER, auto_commit=auto_commit, force_refresh=force_refresh
             )
             if model_output.category_id is not None:
                 return model_output
         except Exception as exc:
-            queued = self._queue_for_retry(db, transaction, exc, auto_commit)
+            queued = self._queue_for_retry(db, transaction, DEFAULT_EXTERNAL_PROVIDER, exc, auto_commit)
             if queued is not None:
                 return queued
+            if self._is_retryable_external_error(exc):
+                return self._mark_retry_failed(db, transaction, DEFAULT_EXTERNAL_PROVIDER, exc, auto_commit)
             fallback_reason = f"external api failed: {exc}"
         else:
             fallback_reason = "external api returned no valid category"
@@ -460,6 +555,8 @@ class CompositeClassifier:
         transaction.auto_confidence = Decimal(str(output.confidence))
         transaction.auto_provider = output.provider
         transaction.auto_reason = output.reason
+        if output.provider != RETRY_QUEUE_PROVIDER:
+            transaction.api_retry_provider = None
         transaction.needs_review = output.confidence < settings.low_confidence_threshold or output.category_id is None
         result = ClassificationResult(
             transaction_id=transaction.id,
@@ -484,20 +581,40 @@ def classify_transaction(
     auto_commit: bool = True,
     *,
     force_refresh: bool = False,
+    enqueue_external: bool = True,
 ) -> ClassificationOutput:
     if provider_override == "rule":
         result = RuleBasedClassifier().classify(db, transaction, user_id)
         if result is None:
-            return ClassificationOutput(None, None, 0.0, "no rule matched", "rule")
-        if auto_commit:
-            db.commit()
+            result = ClassificationOutput(None, None, 0.0, "no rule matched", "rule")
+        CompositeClassifier()._store_result(db, transaction, result, auto_commit=auto_commit)
         return result
-    if provider_override in {"openai_compatible_api", "local_model"}:
+    if provider_override in EXTERNAL_MODEL_PROVIDERS:
         return CompositeClassifier().classify(
-            db, transaction, user_id, provider_override=provider_override, auto_commit=auto_commit, force_refresh=force_refresh
+            db,
+            transaction,
+            user_id,
+            provider_override=provider_override,
+            auto_commit=auto_commit,
+            force_refresh=force_refresh,
+            enqueue_external=enqueue_external,
         )
     if settings.classification_provider == "local_model":
         return CompositeClassifier().classify(
-            db, transaction, user_id, provider_override="local_model", auto_commit=auto_commit, force_refresh=force_refresh
+            db,
+            transaction,
+            user_id,
+            provider_override="local_model",
+            auto_commit=auto_commit,
+            force_refresh=force_refresh,
+            enqueue_external=enqueue_external,
         )
-    return CompositeClassifier().classify(db, transaction, user_id, provider_override=None, auto_commit=auto_commit, force_refresh=force_refresh)
+    return CompositeClassifier().classify(
+        db,
+        transaction,
+        user_id,
+        provider_override=None,
+        auto_commit=auto_commit,
+        force_refresh=force_refresh,
+        enqueue_external=enqueue_external,
+    )

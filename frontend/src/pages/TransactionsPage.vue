@@ -108,8 +108,21 @@ function providerText(provider: string | null) {
     openai_compatible_api: '外部模型',
     local_model: '本地模型',
     retry_queue: '等待重试',
+    retry_failed: '重试失败',
   }
   return provider ? map[provider] ?? provider : '未分类'
+}
+
+function statusText(row: TransactionRow) {
+  if (row.auto_provider === 'retry_queue') return '等待重试'
+  if (row.auto_provider === 'retry_failed') return '重试失败'
+  return row.needs_review ? '待校正' : '已确认'
+}
+
+function statusType(row: TransactionRow) {
+  if (row.auto_provider === 'retry_queue') return 'info'
+  if (row.auto_provider === 'retry_failed') return 'danger'
+  return row.needs_review ? 'warning' : 'success'
 }
 
 function formatDate(value: string) {
@@ -245,8 +258,8 @@ onMounted(async () => {
         </el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <el-tag :type="row.needs_review ? 'warning' : 'success'" class="status-tag">
-              {{ row.needs_review ? '待校正' : '已确认' }}
+            <el-tag :type="statusType(row)" class="status-tag">
+              {{ statusText(row) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -292,7 +305,7 @@ onMounted(async () => {
           <el-descriptions-item label="置信度">{{ selectedRow.auto_confidence || '-' }}</el-descriptions-item>
           <el-descriptions-item label="分类理由">{{ selectedRow.auto_reason || '-' }}</el-descriptions-item>
         </el-descriptions>
-        <el-button type="primary" @click="goReview">前往分类校正</el-button>
+        <el-button type="primary" @click="goReview(selectedRow)">前往分类校正</el-button>
       </div>
     </el-drawer>
   </div>

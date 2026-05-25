@@ -12,8 +12,10 @@ flowchart LR
     API --> REDIS[("Redis")]
     API --> CELERY["Celery Worker"]
     CELERY --> DB
-    API --> OPENAI["OpenAI-Compatible API"]
-    API --> LOCAL["Local Model Service / vLLM"]
+    API --> RETRY["Retry Queue Worker"]
+    RETRY --> DB
+    RETRY --> OPENAI["OpenAI-Compatible API"]
+    RETRY --> LOCAL["Local Model Service / vLLM"]
 ```
 
 低配服务器部署时推荐：
@@ -114,6 +116,15 @@ flowchart LR
 - `openai_compatible_api`: 外部 OpenAI-compatible API。
 - `local_model`: 本地 OpenAI-compatible 模型服务。
 - `composite`: 规则优先 + 缓存 + 模型 API。
+- `retry_queue`: 外部模型请求已进入统一重试池，等待后台串行处理。
+- `retry_failed`: 外部模型超时重试耗尽，等待管理员重新入池。
+
+外部模型重试池：
+
+- 用户导入和重分类请求不会直接并发访问外部模型；交易先标记为 `auto_provider = retry_queue` 并记录 `api_retry_provider`。
+- FastAPI lifespan 启动一个后台 retry queue worker，按 `updated_at` 顺序从所有用户的池子中取一笔交易，串行调用 OpenAI-compatible provider。
+- 超时类错误会继续保留在 `retry_queue` 并递增 `api_retry_count`；达到上限后标记为 `retry_failed`，不进入人工校正列表。
+- 管理员可通过系统设置页或 `POST /api/classification/retry-all` 把历史超时、等待重试和重试失败交易重新放入池子。
 
 ## 7. 异步任务设计
 

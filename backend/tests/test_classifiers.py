@@ -11,7 +11,14 @@ from backend.db.base_class import Base
 from backend.models import Category, ClassificationCache, Transaction, User
 from backend.models import Transaction
 from backend.services import classifiers as classifiers_module
-from backend.services.classifiers import ClassificationOutput, CompositeClassifier, OpenAICompatibleClassifier
+from backend.services.classifiers import (
+    RETRY_FAILED_PROVIDER,
+    RETRY_QUEUE_PROVIDER,
+    ClassificationOutput,
+    CompositeClassifier,
+    OpenAICompatibleClassifier,
+    classify_transaction,
+)
 
 
 def test_model_prompt_prioritizes_merchant_and_summary() -> None:
@@ -161,3 +168,148 @@ def test_duplicate_cache_insert_does_not_poison_session() -> None:
     caches = db.scalars(select(ClassificationCache)).all()
     assert len(caches) == 1
     assert transaction.auto_provider == "openai_compatible_api"
+
+
+def test_external_classification_is_queued_without_calling_model(monkeypatch) -> None:
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=engine)
+    db = Session(engine)
+
+    user = User(username="queue-user", email="queue@example.com", hashed_password="hashed")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    transaction = Transaction(
+        user_id=user.id,
+        batch_id=1,
+        platform="WeChat",
+        occurred_at=datetime(2026, 3, 8, 12, 0, 0),
+        type="支出",
+        amount=Decimal("18.00"),
+        merchant="测试商户",
+        item="午餐",
+        method="零钱",
+        status="支付成功",
+        note="",
+        merchant_norm="测试商户",
+        item_norm="午餐",
+        note_norm="",
+        dedupe_hash="queue-hash",
+    )
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("external model should not be called inline")
+
+    monkeypatch.setattr(OpenAICompatibleClassifier, "classify", fail_if_called)
+
+    output = classify_transaction(db, transaction, user.id)
+
+    assert output.provider == RETRY_QUEUE_PROVIDER
+    assert transaction.auto_provider == RETRY_QUEUE_PROVIDER
+    assert transaction.api_retry_provider == "openai_compatible_api"
+    assert transaction.needs_review is False
+
+
+def test_non_timeout_external_error_falls_back_without_requeue(monkeypatch) -> None:
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=engine)
+    db = Session(engine)
+
+    user = User(username="fallback-user", email="fallback@example.com", hashed_password="hashed")
+    transaction = Transaction(
+        user_id=1,
+        batch_id=1,
+        platform="WeChat",
+        occurred_at=datetime(2026, 3, 8, 12, 0, 0),
+        type="支出",
+        amount=Decimal("18.00"),
+        merchant="测试商户",
+        item="午餐",
+        method="零钱",
+        status="支付成功",
+        note="",
+        merchant_norm="测试商户",
+        item_norm="午餐",
+        note_norm="",
+        dedupe_hash="fallback-hash",
+    )
+    db.add_all([user, transaction])
+    db.commit()
+    db.refresh(user)
+    transaction.user_id = user.id
+    db.commit()
+    db.refresh(transaction)
+
+    def raise_non_timeout(*_args, **_kwargs):
+        raise ValueError("bad api key")
+
+    monkeypatch.setattr(CompositeClassifier, "_classify_with_provider", raise_non_timeout)
+
+    output = CompositeClassifier().classify(
+        db,
+        transaction,
+        user.id,
+        provider_override="openai_compatible_api",
+        enqueue_external=False,
+    )
+
+    assert output.provider == "rule"
+    assert transaction.auto_provider == "rule"
+    assert transaction.api_retry_count == 0
+    assert transaction.needs_review is True
+
+
+def test_exhausted_timeout_is_not_sent_to_manual_review(monkeypatch) -> None:
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=engine)
+    db = Session(engine)
+
+    user = User(username="timeout-user", email="timeout@example.com", hashed_password="hashed")
+    transaction = Transaction(
+        user_id=1,
+        batch_id=1,
+        platform="WeChat",
+        occurred_at=datetime(2026, 3, 8, 12, 0, 0),
+        type="支出",
+        amount=Decimal("18.00"),
+        merchant="测试商户",
+        item="午餐",
+        method="零钱",
+        status="支付成功",
+        note="",
+        merchant_norm="测试商户",
+        item_norm="午餐",
+        note_norm="",
+        dedupe_hash="timeout-hash",
+        api_retry_count=4,
+        api_retry_provider="openai_compatible_api",
+    )
+    db.add_all([user, transaction])
+    db.commit()
+    db.refresh(user)
+    transaction.user_id = user.id
+    db.commit()
+    db.refresh(transaction)
+
+    def raise_timeout(*_args, **_kwargs):
+        raise RuntimeError("external api timeout") from httpx.ReadTimeout("timed out")
+
+    monkeypatch.setattr(classifiers_module.settings, "retry_queue_max_retries", 5)
+    monkeypatch.setattr(CompositeClassifier, "_classify_with_provider", raise_timeout)
+
+    output = CompositeClassifier().classify(
+        db,
+        transaction,
+        user.id,
+        provider_override="openai_compatible_api",
+        enqueue_external=False,
+    )
+
+    assert output.provider == RETRY_FAILED_PROVIDER
+    assert transaction.auto_provider == RETRY_FAILED_PROVIDER
+    assert transaction.api_retry_count == 5
+    assert transaction.needs_review is False

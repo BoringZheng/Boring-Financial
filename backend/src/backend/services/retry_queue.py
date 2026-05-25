@@ -9,7 +9,12 @@ from sqlalchemy import select
 from backend.core.config import settings
 from backend.db.session import SessionLocal
 from backend.models import Transaction
-from backend.services.classifiers import classify_transaction
+from backend.services.classifiers import (
+    DEFAULT_EXTERNAL_PROVIDER,
+    RETRY_FAILED_PROVIDER,
+    RETRY_QUEUE_PROVIDER,
+    classify_transaction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +22,13 @@ logger = logging.getLogger(__name__)
 def _retry_one(db, txn: Transaction) -> None:
     """Classify a single transaction. Errors and requeueing are handled
     inside classify_transaction -> CompositeClassifier.classify."""
+    provider = txn.api_retry_provider or DEFAULT_EXTERNAL_PROVIDER
     classify_transaction(
         db, txn, txn.user_id,
-        provider_override=None,
+        provider_override=provider,
         auto_commit=True,
         force_refresh=True,
+        enqueue_external=False,
     )
 
 
@@ -46,8 +53,8 @@ def run_retry_queue_worker(stop_event: threading.Event) -> None:
         try:
             txn = db.scalars(
                 select(Transaction)
-                .where(Transaction.auto_provider == "retry_queue")
-                .order_by(Transaction.api_retry_count.asc())
+                .where(Transaction.auto_provider == RETRY_QUEUE_PROVIDER)
+                .order_by(Transaction.updated_at.asc(), Transaction.created_at.asc(), Transaction.id.asc())
                 .limit(1)
             ).first()
 
@@ -78,9 +85,8 @@ def run_retry_queue_worker(stop_event: threading.Event) -> None:
 def migrate_existing_timeouts() -> int:
     """One-shot: move existing timeout transactions into the retry queue.
 
-    Finds every transaction where ``needs_review`` is True **and**
-    ``auto_reason`` contains ``"external api"`` (which covers both
-    *"external api failed"* and *"external api timeout"* patterns).
+    Finds old transactions where ``needs_review`` is True, ``auto_reason``
+    contains ``"external api"``, and the retry budget has not been exhausted.
     Sets ``auto_provider = "retry_queue"``, ``needs_review = False``,
     and ``api_retry_count = 0`` so the background worker picks them up.
     """
@@ -90,6 +96,7 @@ def migrate_existing_timeouts() -> int:
             select(Transaction).where(
                 Transaction.needs_review == True,
                 Transaction.auto_reason.contains("external api"),
+                Transaction.api_retry_count < settings.retry_queue_max_retries,
             )
         ).all()
 
@@ -100,6 +107,8 @@ def migrate_existing_timeouts() -> int:
             txn.auto_provider = "retry_queue"
             txn.needs_review = False
             txn.api_retry_count = 0
+            txn.api_retry_provider = DEFAULT_EXTERNAL_PROVIDER
+            txn.api_retry_last_error = None
 
         db.commit()
         logger.info("Migrated %d existing timeout transactions to retry queue", len(txns))
@@ -108,7 +117,7 @@ def migrate_existing_timeouts() -> int:
         db.close()
 
 
-def requeue_all_external_api_failures() -> int:
+def requeue_all_external_api_failures(user_id: int | None = None) -> int:
     """Admin action: push ALL transactions with external-api issues back into
     the retry queue, regardless of their current status.
 
@@ -122,11 +131,14 @@ def requeue_all_external_api_failures() -> int:
     """
     db = SessionLocal()
     try:
-        txns = db.scalars(
-            select(Transaction).where(
-                Transaction.auto_reason.contains("external api"),
-            )
-        ).all()
+        query = select(Transaction).where(
+            (Transaction.auto_provider == RETRY_QUEUE_PROVIDER)
+            | (Transaction.auto_provider == RETRY_FAILED_PROVIDER)
+            | (Transaction.auto_reason.contains("external api"))
+        )
+        if user_id is not None:
+            query = query.where(Transaction.user_id == user_id)
+        txns = db.scalars(query).all()
 
         if not txns:
             logger.info("No transactions with external API issues found")
@@ -136,6 +148,8 @@ def requeue_all_external_api_failures() -> int:
             txn.auto_provider = "retry_queue"
             txn.needs_review = False
             txn.api_retry_count = 0
+            txn.api_retry_provider = txn.api_retry_provider or DEFAULT_EXTERNAL_PROVIDER
+            txn.api_retry_last_error = None
 
         db.commit()
         logger.info("Requeued %d transactions into retry queue", len(txns))

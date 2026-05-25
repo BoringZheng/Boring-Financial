@@ -1,15 +1,21 @@
 ﻿from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.api.dependencies import get_current_user, get_db_session
+from backend.api.dependencies import get_current_user, get_db_session, require_admin
 from backend.models import Transaction, User
 from backend.schemas.transactions import ReclassifyRequest
 from backend.services.classifiers import classify_transaction
+from backend.services.retry_queue import requeue_all_external_api_failures
 
 router = APIRouter()
+
+
+class RetryAllRequest(BaseModel):
+    user_id: int | None = None
 
 
 @router.post("/reclassify")
@@ -32,3 +38,12 @@ def reclassify(
             failed += 1
             failures.append({"transaction_id": transaction.id, "error": str(exc)})
     return {"processed": processed, "failed": failed, "failures": failures}
+
+
+@router.post("/retry-all")
+def retry_all(
+    payload: RetryAllRequest,
+    _: User = Depends(require_admin),
+) -> dict:
+    queued = requeue_all_external_api_failures(user_id=payload.user_id)
+    return {"queued": queued}
