@@ -226,6 +226,7 @@ def process_import_batch(db: Session, batch_id: int, provider_override: str | No
         _append_error_message(batch, "no uploaded files found")
 
     db.commit()
+
     db.refresh(batch)
     return batch
 
