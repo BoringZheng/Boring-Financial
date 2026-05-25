@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Check, Close, MagicStick, Refresh, Select } from '@element-plus/icons-vue'
 import api from '../api/client'
@@ -40,6 +40,7 @@ const selectedId = ref<number | null>(null)
 const submittingReview = ref(false)
 const reclassifying = ref(false)
 const route = useRoute()
+const router = useRouter()
 const reviewForm = reactive({
   categoryId: undefined as number | undefined,
 })
@@ -77,6 +78,7 @@ function providerText(provider: string | null) {
     composite: '混合分类',
     openai_compatible_api: '外部模型',
     local_model: '本地模型',
+    retry_queue: '等待重试',
   }
   return provider ? map[provider] ?? provider : '未分类'
 }
@@ -153,6 +155,9 @@ async function confirmCategory(categoryId: number | undefined, successMessage: s
       mark_reviewed: true,
     })
     ElMessage.success(successMessage)
+    if (route.query.id != null) {
+      router.replace({ query: {} })
+    }
     await load()
   } catch {
     ElMessage.error('人工复核保存失败，请稍后重试')

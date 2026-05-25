@@ -107,6 +107,7 @@ function providerText(provider: string | null) {
     composite: '混合',
     openai_compatible_api: '外部模型',
     local_model: '本地模型',
+    retry_queue: '等待重试',
   }
   return provider ? map[provider] ?? provider : '未分类'
 }
