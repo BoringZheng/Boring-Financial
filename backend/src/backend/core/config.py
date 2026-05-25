@@ -40,7 +40,6 @@ class Settings(BaseSettings):
     retry_queue_max_retries: int = 10
     retry_queue_delay_seconds: float = 1.0
     retry_queue_poll_seconds: float = 15.0
-    retry_queue_auto_requeue_minutes: float = 5.0
     storage_dir: str = "./storage"
     task_always_eager: bool = True
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:5173"])

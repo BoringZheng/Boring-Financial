@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 
 from sqlalchemy import select
+from sqlalchemy.engine import make_url
 
 from backend.core.config import settings
 from backend.db.runtime_schema import ensure_runtime_schema
@@ -24,9 +25,16 @@ def _draw_progress_bar(current: int, total: int, bar_width: int = 40) -> None:
     print(f"\r  [{bar}] {current}/{total}", end="", flush=True)
 
 
+def _redacted_database_url() -> str:
+    try:
+        return make_url(settings.database_url).render_as_string(hide_password=True)
+    except Exception:
+        return "<configured>"
+
+
 def cmd_retry_all(user_id: int | None = None) -> None:
     """Requeue every transaction whose auto_reason mentions 'external api'."""
-    print(f"Database: {settings.database_url}")
+    print(f"Database: {_redacted_database_url()}")
     print("Scanning for transactions with external API issues ...")
     ensure_runtime_schema()
     count = requeue_all_external_api_failures(
@@ -66,10 +74,11 @@ def main() -> None:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser(
+    retry_all = sub.add_parser(
         "retry-all",
         help="Push all external-API-failed transactions back to retry queue",
     )
+    retry_all.add_argument("--user-id", type=int, default=None)
     make_admin = sub.add_parser(
         "make-admin",
         help="Grant admin privileges to an existing user",
@@ -79,7 +88,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "retry-all":
-        cmd_retry_all()
+        cmd_retry_all(user_id=args.user_id)
     elif args.command == "make-admin":
         cmd_make_admin(args.username)
 

@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from typing import Callable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from backend.core.config import settings
 from backend.db.session import SessionLocal
@@ -60,10 +59,6 @@ def run_retry_queue_worker(stop_event: threading.Event) -> None:
             ).first()
 
             if txn is None:
-                # Queue is empty — check for retry_failed txns to auto-requeue
-                requeued = auto_requeue_failed()
-                if requeued > 0:
-                    continue  # immediately pick up the newly requeued txns
                 stop_event.wait(settings.retry_queue_poll_seconds)
                 continue
 
@@ -165,34 +160,86 @@ def requeue_all_external_api_failures(
         db.close()
 
 
-def auto_requeue_failed() -> int:
-    """Periodic scan: move retry_failed transactions back to the retry queue
-    after they have been sitting for *retry_queue_auto_requeue_minutes*.
-    Resets api_retry_count so they get a fresh round of attempts."""
-    from datetime import datetime, timedelta, timezone
+def _isoformat(value) -> str | None:
+    return value.isoformat() if value is not None else None
 
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=settings.retry_queue_auto_requeue_minutes)
+
+def get_retry_queue_status(user_id: int | None = None) -> dict:
+    """Return aggregate retry queue status for admin dashboards.
+
+    The response intentionally avoids transaction-level details, merchant text,
+    notes, and raw provider errors.
+    """
     db = SessionLocal()
     try:
-        txns = db.scalars(
-            select(Transaction).where(
-                Transaction.auto_provider == RETRY_FAILED_PROVIDER,
-                Transaction.updated_at <= cutoff,
+        base_filters = [Transaction.auto_provider.in_([RETRY_QUEUE_PROVIDER, RETRY_FAILED_PROVIDER])]
+        if user_id is not None:
+            base_filters.append(Transaction.user_id == user_id)
+
+        counts = dict(
+            db.execute(
+                select(Transaction.auto_provider, func.count())
+                .where(*base_filters)
+                .group_by(Transaction.auto_provider)
+            ).all()
+        )
+        queued = int(counts.get(RETRY_QUEUE_PROVIDER, 0))
+        failed = int(counts.get(RETRY_FAILED_PROVIDER, 0))
+
+        provider_rows = db.execute(
+            select(
+                Transaction.api_retry_provider,
+                Transaction.auto_provider,
+                func.count(),
             )
+            .where(*base_filters)
+            .group_by(Transaction.api_retry_provider, Transaction.auto_provider)
+        ).all()
+        providers: dict[str, dict[str, int | str]] = {}
+        for provider, status, count in provider_rows:
+            provider_name = provider or DEFAULT_EXTERNAL_PROVIDER
+            entry = providers.setdefault(provider_name, {"provider": provider_name, "queued": 0, "failed": 0})
+            if status == RETRY_QUEUE_PROVIDER:
+                entry["queued"] = int(count)
+            elif status == RETRY_FAILED_PROVIDER:
+                entry["failed"] = int(count)
+
+        retry_count_rows = db.execute(
+            select(Transaction.api_retry_count, func.count())
+            .where(Transaction.auto_provider == RETRY_QUEUE_PROVIDER, *(base_filters[1:]))
+            .group_by(Transaction.api_retry_count)
+            .order_by(Transaction.api_retry_count.asc())
         ).all()
 
-        if not txns:
-            return 0
+        oldest_queued = db.scalar(
+            select(func.min(Transaction.updated_at)).where(
+                Transaction.auto_provider == RETRY_QUEUE_PROVIDER,
+                *(base_filters[1:]),
+            )
+        )
+        oldest_failed = db.scalar(
+            select(func.min(Transaction.updated_at)).where(
+                Transaction.auto_provider == RETRY_FAILED_PROVIDER,
+                *(base_filters[1:]),
+            )
+        )
+        newest_activity = db.scalar(select(func.max(Transaction.updated_at)).where(*base_filters))
 
-        for txn in txns:
-            txn.auto_provider = RETRY_QUEUE_PROVIDER
-            txn.needs_review = False
-            txn.api_retry_count = 0
-            txn.api_retry_provider = txn.api_retry_provider or DEFAULT_EXTERNAL_PROVIDER
-            txn.api_retry_last_error = None
-
-        db.commit()
-        logger.info("Auto-requeued %d retry_failed transactions", len(txns))
-        return len(txns)
+        return {
+            "queued": queued,
+            "failed": failed,
+            "total": queued + failed,
+            "max_retries": settings.retry_queue_max_retries,
+            "delay_seconds": settings.retry_queue_delay_seconds,
+            "poll_seconds": settings.retry_queue_poll_seconds,
+            "oldest_queued_at": _isoformat(oldest_queued),
+            "oldest_failed_at": _isoformat(oldest_failed),
+            "newest_activity_at": _isoformat(newest_activity),
+            "providers": sorted(providers.values(), key=lambda item: str(item["provider"])),
+            "retry_counts": [
+                {"retry_count": int(retry_count or 0), "queued": int(count)}
+                for retry_count, count in retry_count_rows
+            ],
+        }
     finally:
         db.close()

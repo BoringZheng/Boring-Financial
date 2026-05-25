@@ -373,6 +373,39 @@ files=<alipay.xlsx>
 - 需要 Bearer token。
 - 当前用户必须 `is_admin = true`，否则返回 `403`。
 
+### `GET /api/classification/retry-status`
+
+管理员接口。返回重试池聚合状态，用于后台实时监控。接口不会返回商户、备注、交易明细或外部 provider 原始错误。
+
+支持 query 参数：
+- `user_id`：可选，只统计指定用户。
+
+响应：
+```json
+{
+  "queued": 8,
+  "failed": 2,
+  "total": 10,
+  "max_retries": 10,
+  "delay_seconds": 1.0,
+  "poll_seconds": 15.0,
+  "oldest_queued_at": "2026-05-25T12:00:00",
+  "oldest_failed_at": "2026-05-25T12:10:00",
+  "newest_activity_at": "2026-05-25T12:20:00",
+  "providers": [
+    {"provider": "openai_compatible_api", "queued": 8, "failed": 2}
+  ],
+  "retry_counts": [
+    {"retry_count": 0, "queued": 6},
+    {"retry_count": 1, "queued": 2}
+  ]
+}
+```
+
+权限：
+- 需要 Bearer token。
+- 当前用户必须 `is_admin = true`，否则返回 `403`。
+
 ## 7. Dashboard
 
 ### `GET /api/dashboard/summary`

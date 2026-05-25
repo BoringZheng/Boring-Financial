@@ -125,6 +125,7 @@ flowchart LR
 - FastAPI lifespan 启动一个后台 retry queue worker，按 `updated_at` 顺序从所有用户的池子中取一笔交易，串行调用 OpenAI-compatible provider。
 - 超时类错误会继续保留在 `retry_queue` 并递增 `api_retry_count`；达到上限后标记为 `retry_failed`，不进入人工校正列表。
 - 管理员可通过系统设置页或 `POST /api/classification/retry-all` 把历史超时、等待重试和重试失败交易重新放入池子。
+- 管理员可通过 `GET /api/classification/retry-status` 查看重试池聚合状态；该接口只返回数量、provider 分布和重试次数分布，不返回交易文本或原始错误。
 
 ## 7. 异步任务设计
 

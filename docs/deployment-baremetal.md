@@ -94,6 +94,7 @@ CLASSIFICATION_PROVIDER=composite
 cd /opt/Boring-Financial/backend
 uv run bf-admin make-admin <username>
 uv run bf-admin retry-all
+uv run bf-admin retry-all --user-id <id>
 ```
 
 ## 6. systemd 服务

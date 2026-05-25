@@ -9,7 +9,7 @@ from backend.api.dependencies import get_current_user, get_db_session, require_a
 from backend.models import Transaction, User
 from backend.schemas.transactions import ReclassifyRequest
 from backend.services.classifiers import classify_transaction
-from backend.services.retry_queue import requeue_all_external_api_failures
+from backend.services.retry_queue import get_retry_queue_status, requeue_all_external_api_failures
 
 router = APIRouter()
 
@@ -47,3 +47,11 @@ def retry_all(
 ) -> dict:
     queued = requeue_all_external_api_failures(user_id=payload.user_id)
     return {"queued": queued}
+
+
+@router.get("/retry-status")
+def retry_status(
+    user_id: int | None = None,
+    _: User = Depends(require_admin),
+) -> dict:
+    return get_retry_queue_status(user_id=user_id)

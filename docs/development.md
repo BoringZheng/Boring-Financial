@@ -141,6 +141,7 @@ uv run pytest --cov=backend
 uv run alembic upgrade head
 uv run celery -A backend.core.celery_app.celery_app worker -l info
 uv run bf-admin retry-all
+uv run bf-admin retry-all --user-id <id>
 uv run bf-admin make-admin <username>
 ```
 

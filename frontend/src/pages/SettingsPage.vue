@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -14,18 +14,87 @@ const settingsForm = reactive({
 const thresholdText = computed(() => `${Math.round(settingsForm.lowConfidenceThreshold * 100)}%`)
 const auth = useAuthStore()
 const retryingAll = ref(false)
+const retryStatusLoading = ref(false)
+const retryStatus = ref<RetryQueueStatus | null>(null)
+let retryStatusTimer: number | undefined
+
+type RetryQueueStatus = {
+  queued: number
+  failed: number
+  total: number
+  max_retries: number
+  delay_seconds: number
+  poll_seconds: number
+  oldest_queued_at: string | null
+  oldest_failed_at: string | null
+  newest_activity_at: string | null
+  providers: Array<{ provider: string; queued: number; failed: number }>
+  retry_counts: Array<{ retry_count: number; queued: number }>
+}
+
+function formatStatusTime(value: string | null) {
+  if (!value) return '-'
+  return new Date(value).toLocaleString('zh-CN', { hour12: false })
+}
+
+async function loadRetryStatus(silent = false) {
+  if (!auth.user?.is_admin) return
+  if (!silent) retryStatusLoading.value = true
+  try {
+    const { data } = await api.get<RetryQueueStatus>('/classification/retry-status')
+    retryStatus.value = data
+  } catch {
+    if (!silent) ElMessage.error('重试池状态加载失败')
+  } finally {
+    if (!silent) retryStatusLoading.value = false
+  }
+}
 
 async function retryAllTimeouts() {
   retryingAll.value = true
   try {
     const { data } = await api.post<{ queued: number }>('/classification/retry-all', {})
     ElMessage.success(`已放回重试池 ${data.queued} 笔`)
+    await loadRetryStatus(true)
   } catch {
     ElMessage.error('重试池操作失败，请确认当前账号有管理员权限')
   } finally {
     retryingAll.value = false
   }
 }
+
+function startRetryStatusPolling() {
+  if (!auth.user?.is_admin || retryStatusTimer !== undefined) return
+  loadRetryStatus()
+  retryStatusTimer = window.setInterval(() => loadRetryStatus(true), 5000)
+}
+
+function stopRetryStatusPolling() {
+  if (retryStatusTimer !== undefined) {
+    window.clearInterval(retryStatusTimer)
+    retryStatusTimer = undefined
+  }
+}
+
+watch(
+  () => auth.user?.is_admin,
+  (isAdmin) => {
+    if (isAdmin) {
+      startRetryStatusPolling()
+    } else {
+      stopRetryStatusPolling()
+      retryStatus.value = null
+    }
+  },
+)
+
+onMounted(() => {
+  startRetryStatusPolling()
+})
+
+onUnmounted(() => {
+  stopRetryStatusPolling()
+})
 </script>
 
 <template>
@@ -72,8 +141,35 @@ async function retryAllTimeouts() {
           <h2>运行模式</h2>
           <el-tag type="success">轻量</el-tag>
         </div>
-        <div v-if="auth.user?.is_admin" class="admin-actions">
-          <strong>超时重试池</strong>
+        <div v-if="auth.user?.is_admin" class="admin-actions" v-loading="retryStatusLoading">
+          <div class="admin-actions-head">
+            <strong>超时重试池</strong>
+            <el-button text size="small" @click="loadRetryStatus()">刷新</el-button>
+          </div>
+          <div class="retry-stats">
+            <div>
+              <span>等待</span>
+              <b>{{ retryStatus?.queued ?? 0 }}</b>
+            </div>
+            <div>
+              <span>失败</span>
+              <b>{{ retryStatus?.failed ?? 0 }}</b>
+            </div>
+            <div>
+              <span>合计</span>
+              <b>{{ retryStatus?.total ?? 0 }}</b>
+            </div>
+          </div>
+          <div class="retry-meta">
+            <span>最早等待：{{ formatStatusTime(retryStatus?.oldest_queued_at ?? null) }}</span>
+            <span>最近变更：{{ formatStatusTime(retryStatus?.newest_activity_at ?? null) }}</span>
+            <span>节流：{{ retryStatus?.delay_seconds ?? '-' }}s / 最大 {{ retryStatus?.max_retries ?? '-' }} 次</span>
+          </div>
+          <div v-if="retryStatus?.providers.length" class="provider-breakdown">
+            <span v-for="item in retryStatus.providers" :key="item.provider">
+              {{ item.provider }}：{{ item.queued }} 等待 / {{ item.failed }} 失败
+            </span>
+          </div>
           <el-button type="primary" :loading="retryingAll" @click="retryAllTimeouts">一键重试历史超时</el-button>
         </div>
         <div class="mode-list">
@@ -127,6 +223,46 @@ async function retryAllTimeouts() {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: #f8fafc;
+}
+
+.admin-actions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.retry-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.retry-stats div {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.retry-stats span,
+.retry-meta,
+.provider-breakdown {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.retry-stats b {
+  font-size: 20px;
+}
+
+.retry-meta,
+.provider-breakdown {
+  display: grid;
+  gap: 5px;
+  line-height: 1.5;
 }
 
 .mode-list div {

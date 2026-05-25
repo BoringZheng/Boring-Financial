@@ -85,6 +85,7 @@ CLASSIFICATION_PROVIDER=composite
 cd backend
 uv run bf-admin make-admin <username>
 uv run bf-admin retry-all
+uv run bf-admin retry-all --user-id <id>
 ```
 
 ## 5. 启动服务
