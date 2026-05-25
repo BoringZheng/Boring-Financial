@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     local_model_api_key: str = "EMPTY"
     local_model_name: str = "Qwen2.5-7B-Instruct"
     low_confidence_threshold: float = 0.75
+    # Retry queue settings — api failures during import / reclassify are queued
+    # and retried one-at-a-time by a background thread.
+    retry_queue_max_retries: int = 5
+    retry_queue_delay_seconds: float = 5.0
+    retry_queue_poll_seconds: float = 15.0
     storage_dir: str = "./storage"
     task_always_eager: bool = True
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:5173"])
