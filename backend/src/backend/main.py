@@ -23,6 +23,11 @@ def ensure_runtime_schema() -> None:
     if "total_count" not in columns:
         statements.append("ALTER TABLE import_batches ADD COLUMN total_count INTEGER DEFAULT 0 NOT NULL")
 
+    if "transactions" in inspector.get_table_names():
+        txn_columns = {column["name"] for column in inspector.get_columns("transactions")}
+        if "api_retry_count" not in txn_columns:
+            statements.append("ALTER TABLE transactions ADD COLUMN api_retry_count INTEGER DEFAULT 0 NOT NULL")
+
     if not statements:
         return
 
