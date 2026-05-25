@@ -18,17 +18,26 @@ from backend.models import User
 from backend.services.retry_queue import requeue_all_external_api_failures
 
 
-def cmd_retry_all() -> None:
+def _draw_progress_bar(current: int, total: int, bar_width: int = 40) -> None:
+    filled = int(current / total * bar_width)
+    bar = "#" * filled + "-" * (bar_width - filled)
+    print(f"\r  [{bar}] {current}/{total}", end="", flush=True)
+
+
+def cmd_retry_all(user_id: int | None = None) -> None:
     """Requeue every transaction whose auto_reason mentions 'external api'."""
     print(f"Database: {settings.database_url}")
     print("Scanning for transactions with external API issues ...")
     ensure_runtime_schema()
-    count = requeue_all_external_api_failures()
+    count = requeue_all_external_api_failures(
+        user_id=user_id,
+        on_progress=_draw_progress_bar,
+    )
     if count == 0:
-        print("No transactions found — nothing to do.")
+        print("\nNo transactions found — nothing to do.")
     else:
         print(
-            f"Done — {count} transaction(s) moved to retry queue. "
+            f"\nDone — {count} transaction(s) moved to retry queue. "
             f"The background worker will retry them one at a time "
             f"(max {settings.retry_queue_max_retries} retries, "
             f"{settings.retry_queue_delay_seconds}s delay between requests)."

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from typing import Callable
 
 from sqlalchemy import select
 
@@ -117,15 +118,15 @@ def migrate_existing_timeouts() -> int:
         db.close()
 
 
-def requeue_all_external_api_failures(user_id: int | None = None) -> int:
+def requeue_all_external_api_failures(
+    user_id: int | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> int:
     """Admin action: push ALL transactions with external-api issues back into
     the retry queue, regardless of their current status.
 
-    This covers:
-    - transactions already in ``retry_queue`` (reset retry count)
-    - transactions that fell back to rules after exhausting retries
-    - transactions manually reviewed but originally from API failures
-    - any transaction whose ``auto_reason`` mentions "external api"
+    If *on_progress* is provided it is called as ``on_progress(current, total)``
+    after each transaction is updated.
 
     Returns the number of transactions queued.
     """
@@ -144,15 +145,18 @@ def requeue_all_external_api_failures(user_id: int | None = None) -> int:
             logger.info("No transactions with external API issues found")
             return 0
 
-        for txn in txns:
+        total = len(txns)
+        for i, txn in enumerate(txns):
             txn.auto_provider = "retry_queue"
             txn.needs_review = False
             txn.api_retry_count = 0
             txn.api_retry_provider = txn.api_retry_provider or DEFAULT_EXTERNAL_PROVIDER
             txn.api_retry_last_error = None
+            if on_progress is not None:
+                on_progress(i + 1, total)
 
         db.commit()
-        logger.info("Requeued %d transactions into retry queue", len(txns))
-        return len(txns)
+        logger.info("Requeued %d transactions into retry queue", total)
+        return total
     finally:
         db.close()
