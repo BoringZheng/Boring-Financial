@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import csv
 import os
 from dataclasses import dataclass
 from decimal import Decimal
@@ -8,6 +9,20 @@ from pathlib import Path
 import pandas as pd
 
 from backend.utils.normalizers import clean_amount, normalize_text, parse_datetime
+
+
+CSV_ENCODINGS = ["utf-8-sig", "utf-8", "gbk", "gb18030", "cp936", "latin1"]
+
+
+def _read_csv_rows(path: Path, encoding: str, scan_rows: int) -> list[list[str]]:
+    rows: list[list[str]] = []
+    with path.open("r", encoding=encoding, newline="") as file:
+        reader = csv.reader(file)
+        for row_index, row in enumerate(reader):
+            if row_index >= scan_rows:
+                break
+            rows.append(row)
+    return rows
 
 
 @dataclass
@@ -49,23 +64,41 @@ class StatementReader:
         return df
 
     def _read_csv(self, path: Path) -> pd.DataFrame:
-        for encoding in ["utf-8-sig", "utf-8", "gbk", "gb18030", "cp936", "latin1"]:
+        last_error: Exception | None = None
+        for encoding in CSV_ENCODINGS:
             try:
                 df = pd.read_csv(path, encoding=encoding)
                 if self._looks_like_statement(df):
                     return df
+            except Exception as exc:
+                last_error = exc
+
+            try:
                 header_row = self._detect_header_row_csv(path, encoding)
-                if header_row is not None:
-                    return pd.read_csv(path, encoding=encoding, header=header_row)
-                for skiprows in [1, 2, 3, 4, 5, 10, 15, 16, 20]:
-                    try:
-                        df2 = pd.read_csv(path, encoding=encoding, skiprows=skiprows)
-                        if self._looks_like_statement(df2):
-                            return df2
-                    except Exception:
-                        continue
-            except Exception:
+            except UnicodeDecodeError as exc:
+                last_error = exc
                 continue
+            except Exception as exc:
+                last_error = exc
+                header_row = None
+
+            if header_row is not None:
+                try:
+                    return pd.read_csv(path, encoding=encoding, header=header_row, skip_blank_lines=False)
+                except Exception as exc:
+                    last_error = exc
+
+            for skiprows in [1, 2, 3, 4, 5, 10, 15, 16, 20]:
+                try:
+                    df2 = pd.read_csv(path, encoding=encoding, skiprows=skiprows)
+                    if self._looks_like_statement(df2):
+                        return df2
+                except Exception as exc:
+                    last_error = exc
+                    continue
+        if last_error is not None:
+            supported = ", ".join(CSV_ENCODINGS)
+            raise ValueError(f"Unable to read CSV with supported encodings ({supported}): {last_error}") from last_error
         return pd.read_csv(path)
 
     def _looks_like_statement(self, df: pd.DataFrame) -> bool:
@@ -77,19 +110,26 @@ class StatementReader:
         return self._find_header_row(sample)
 
     def _detect_header_row_csv(self, path: Path, encoding: str, scan_rows: int = 40) -> int | None:
-        sample = pd.read_csv(path, encoding=encoding, header=None, nrows=scan_rows, on_bad_lines="skip")
-        return self._find_header_row(sample)
+        rows = _read_csv_rows(path, encoding, scan_rows)
+        return self._find_header_row_values(rows)
 
     def _find_header_row(self, sample: pd.DataFrame) -> int | None:
-        for row_index, row in sample.iterrows():
-            values = [str(value).strip() for value in row.tolist() if not pd.isna(value)]
+        rows = (
+            [str(value).strip() for value in row.tolist() if not pd.isna(value)]
+            for _, row in sample.iterrows()
+        )
+        return self._find_header_row_values(rows)
+
+    def _find_header_row_values(self, rows) -> int | None:
+        for row_index, row in enumerate(rows):
+            values = [str(value).strip() for value in row if str(value).strip()]
             if not values:
                 continue
             has_time = any("交易时间" in value or value == "时间" or "支付时间" in value for value in values)
             has_amount = any("金额" in value for value in values)
             has_direction = any(value in {"收/支", "收支"} for value in values)
             if has_time and has_amount and (has_direction or any("交易类型" in value for value in values)):
-                return int(row_index)
+                return row_index
         return None
 
 
@@ -224,9 +264,9 @@ class ParserRegistry:
         try:
             if str(file_path).lower().endswith((".xls", ".xlsx")):
                 preview = pd.read_excel(file_path, header=None, nrows=5)
+                text = " ".join(str(value) for value in preview.fillna("").to_numpy().flatten())
             else:
-                preview = pd.read_csv(file_path, header=None, nrows=5, encoding="utf-8-sig")
-            text = " ".join(str(value) for value in preview.fillna("").to_numpy().flatten())
+                text = self._detect_csv_preview_text(file_path)
             if "微信支付账单明细" in text:
                 return "wechat"
             if "支付宝" in text:
@@ -234,3 +274,19 @@ class ParserRegistry:
         except Exception:
             return None
         return None
+
+    def _detect_csv_preview_text(self, file_path: Path) -> str:
+        last_error: Exception | None = None
+        for encoding in CSV_ENCODINGS:
+            try:
+                rows = _read_csv_rows(file_path, encoding, scan_rows=10)
+                return " ".join(str(value) for row in rows for value in row)
+            except UnicodeDecodeError as exc:
+                last_error = exc
+                continue
+            except Exception as exc:
+                last_error = exc
+                continue
+        if last_error is not None:
+            raise last_error
+        return ""
