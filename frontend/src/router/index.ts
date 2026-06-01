@@ -1,4 +1,4 @@
-﻿import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { pinia } from '../stores'
 import AppLayout from '../layouts/AppLayout.vue'
@@ -8,7 +8,9 @@ import ImportsPage from '../pages/ImportsPage.vue'
 import TransactionsPage from '../pages/TransactionsPage.vue'
 import ReviewPage from '../pages/ReviewPage.vue'
 import CategoriesPage from '../pages/CategoriesPage.vue'
+import PersonalityPage from '../pages/PersonalityPage.vue'
 import ReportsPage from '../pages/ReportsPage.vue'
+import SettingsPage from '../pages/SettingsPage.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -26,6 +28,8 @@ const router = createRouter({
         { path: 'review', component: ReviewPage },
         { path: 'categories', component: CategoriesPage },
         { path: 'reports', component: ReportsPage },
+        { path: 'personality', component: PersonalityPage },
+        { path: 'settings', component: SettingsPage },
       ],
     },
   ],

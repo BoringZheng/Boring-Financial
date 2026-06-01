@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Thread
 
@@ -116,106 +115,95 @@ def process_import_batch(db: Session, batch_id: int, provider_override: str | No
     has_failures = False
     progress_since_commit = 0
 
-    max_workers = max(1, settings.import_classification_workers)
-    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="bill-classify") as executor:
-        for uploaded in uploaded_files:
-            uploaded.status = "processing"
-            uploaded.error_message = None
+    for uploaded in uploaded_files:
+        uploaded.status = "processing"
+        uploaded.error_message = None
+        db.commit()
+
+        try:
+            parsed_transactions = parser_registry.parse_file(uploaded.stored_path)
+            batch.total_count += len(parsed_transactions)
+            uploaded.platform = parsed_transactions[0].platform if parsed_transactions else None
             db.commit()
 
-            try:
-                parsed_transactions = parser_registry.parse_file(uploaded.stored_path)
-                batch.total_count += len(parsed_transactions)
-                uploaded.platform = parsed_transactions[0].platform if parsed_transactions else None
-                db.commit()
-
-                file_has_failures = False
-                pending_futures: list[Future[str | None]] = []
-                for parsed in parsed_transactions:
-                    try:
-                        normalized = TransactionNormalizer.normalize_text_fields(parsed)
-                        dedupe_hash = build_dedupe_hash(
-                            parsed.platform,
-                            parsed.occurred_at,
-                            parsed.amount,
-                            parsed.merchant,
-                            parsed.item,
+            file_has_failures = False
+            for parsed in parsed_transactions:
+                try:
+                    normalized = TransactionNormalizer.normalize_text_fields(parsed)
+                    dedupe_hash = build_dedupe_hash(
+                        parsed.platform,
+                        parsed.occurred_at,
+                        parsed.amount,
+                        parsed.merchant,
+                        parsed.item,
+                    )
+                    duplicate = db.scalar(
+                        select(Transaction).where(
+                            Transaction.user_id == batch.user_id,
+                            Transaction.dedupe_hash == dedupe_hash,
                         )
-                        duplicate = db.scalar(
-                            select(Transaction).where(
-                                Transaction.user_id == batch.user_id,
-                                Transaction.dedupe_hash == dedupe_hash,
-                            )
+                    )
+                    if duplicate is None:
+                        transaction = Transaction(
+                            user_id=batch.user_id,
+                            batch_id=batch.id,
+                            uploaded_file_id=uploaded.id,
+                            platform=parsed.platform,
+                            occurred_at=parsed.occurred_at,
+                            type=parsed.type,
+                            amount=parsed.amount,
+                            merchant=str(parsed.merchant or "")[:255],
+                            item=str(parsed.item or "")[:255],
+                            method=str(parsed.method or "")[:128],
+                            status=str(parsed.status or "")[:128],
+                            note=str(parsed.note or ""),
+                            dedupe_hash=dedupe_hash,
+                            **normalized,
                         )
-                        if duplicate is None:
-                            transaction = Transaction(
-                                user_id=batch.user_id,
-                                batch_id=batch.id,
-                                uploaded_file_id=uploaded.id,
-                                platform=parsed.platform,
-                                occurred_at=parsed.occurred_at,
-                                type=parsed.type,
-                                amount=parsed.amount,
-                                merchant=str(parsed.merchant or "")[:255],
-                                item=str(parsed.item or "")[:255],
-                                method=str(parsed.method or "")[:128],
-                                status=str(parsed.status or "")[:128],
-                                note=str(parsed.note or ""),
-                                dedupe_hash=dedupe_hash,
-                                **normalized,
-                            )
-                            db.add(transaction)
-                            db.commit()
-                            pending_futures.append(
-                                executor.submit(
-                                    classify_transaction_in_session,
-                                    transaction.id,
-                                    batch.user_id,
-                                    provider_override,
-                                )
-                            )
-                        else:
-                            batch.processed_count += 1
-                            progress_since_commit += 1
-                            if progress_since_commit >= settings.import_progress_commit_interval:
-                                db.commit()
-                                progress_since_commit = 0
-                    except Exception as exc:
-                        db.rollback()
-                        file_has_failures = True
+                        db.add(transaction)
+                        db.commit()
+                        classify_transaction(
+                            db,
+                            transaction,
+                            batch.user_id,
+                            provider_override=provider_override,
+                            auto_commit=True,
+                        )
                         batch.processed_count += 1
                         progress_since_commit += 1
-                        _append_error_message(uploaded, str(exc))
-                        _append_error_message(batch, f"{uploaded.filename}: {exc}")
-                        db.commit()
-                        progress_since_commit = 0
-
-                for future in as_completed(pending_futures):
-                    error_message = future.result()
-                    if error_message:
-                        file_has_failures = True
-                        _append_error_message(uploaded, error_message)
-                        _append_error_message(batch, f"{uploaded.filename}: {error_message}")
+                        if progress_since_commit >= settings.import_progress_commit_interval:
+                            db.commit()
+                            progress_since_commit = 0
+                    else:
+                        batch.processed_count += 1
+                        progress_since_commit += 1
+                        if progress_since_commit >= settings.import_progress_commit_interval:
+                            db.commit()
+                            progress_since_commit = 0
+                except Exception as exc:
+                    db.rollback()
+                    file_has_failures = True
                     batch.processed_count += 1
                     progress_since_commit += 1
-                    if progress_since_commit >= settings.import_progress_commit_interval:
-                        db.commit()
-                        progress_since_commit = 0
+                    _append_error_message(uploaded, str(exc))
+                    _append_error_message(batch, f"{uploaded.filename}: {exc}")
+                    db.commit()
+                    progress_since_commit = 0
 
-                if file_has_failures:
-                    has_failures = True
-                    uploaded.status = "partial_failed"
-                else:
-                    uploaded.status = "done"
-                db.commit()
-                progress_since_commit = 0
-            except Exception as exc:
-                db.rollback()
+            if file_has_failures:
                 has_failures = True
-                uploaded.status = "failed"
-                _append_error_message(uploaded, str(exc))
-                _append_error_message(batch, f"{uploaded.filename}: {exc}")
-                db.commit()
+                uploaded.status = "partial_failed"
+            else:
+                uploaded.status = "done"
+            db.commit()
+            progress_since_commit = 0
+        except Exception as exc:
+            db.rollback()
+            has_failures = True
+            uploaded.status = "failed"
+            _append_error_message(uploaded, str(exc))
+            _append_error_message(batch, f"{uploaded.filename}: {exc}")
+            db.commit()
 
     if has_failures:
         batch.status = "partial_failed"
@@ -226,6 +214,7 @@ def process_import_batch(db: Session, batch_id: int, provider_override: str | No
         _append_error_message(batch, "no uploaded files found")
 
     db.commit()
+
     db.refresh(batch)
     return batch
 

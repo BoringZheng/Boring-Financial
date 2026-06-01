@@ -15,7 +15,7 @@ def reclassify_transactions(user_id: int, transaction_ids: list[int], provider: 
             transaction = db.get(Transaction, transaction_id)
             if transaction is None or transaction.user_id != user_id:
                 continue
-            classify_transaction(db, transaction, user_id, provider_override=provider)
+            classify_transaction(db, transaction, user_id, provider_override=provider, force_refresh=True)
             processed += 1
         return {"processed": processed}
     finally:

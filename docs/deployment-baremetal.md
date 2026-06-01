@@ -1,26 +1,21 @@
 # 裸机部署文档
 
-目标：
+本文档说明如何在 Debian / Ubuntu 主机上不使用 Docker 直接部署项目。该方式适合性能较弱的服务器：前端构建为静态文件，后端由 systemd 托管，公网入口统一由 Nginx 暴露。
 
-- Debian / Ubuntu 宿主机直接运行 FastAPI 后端
-- 前端编译为静态文件，由 Nginx 提供
-- 公网入口统一由 Nginx 暴露
-- 默认不依赖 Docker
-
-## 1. 推荐部署形态
+## 1. 推荐拓扑
 
 ```text
-browser -> nginx:80 -> /      -> frontend/dist
-browser -> nginx:80 -> /api/* -> 127.0.0.1:8000
-browser -> nginx:80 -> /health -> 127.0.0.1:8000/health
+browser -> nginx:80 -> /        -> frontend/dist
+browser -> nginx:80 -> /api/*   -> 127.0.0.1:8000
+browser -> nginx:80 -> /health  -> 127.0.0.1:8000/health
 ```
 
-说明：
+建议：
 
-- 后端只监听 `127.0.0.1:8000`
-- 公网不直接暴露 8000
-- 静态资源不要放在 `/root/...`
-- 推荐部署目录：`/opt/Boring-Financial`
+- 后端只监听 `127.0.0.1:8000`。
+- 公网不要直接暴露 `8000`。
+- 前端静态资源放在 `/opt/Boring-Financial/frontend/dist`。
+- 低配服务器可使用 SQLite 和 `TASK_ALWAYS_EAGER=true`。
 
 ## 2. 系统依赖
 
@@ -29,9 +24,25 @@ sudo apt update
 sudo apt install -y git python3 python3-venv python3-pip nodejs npm nginx fonts-noto-cjk
 ```
 
+如果系统 Node.js 版本过低，请使用 NodeSource 或 nvm 安装 Node.js 20+。
+
+后端依赖由 `uv` 管理，服务器也需要安装 `uv`：
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+安装后重新打开 shell，确认：
+
+```bash
+uv --version
+```
+
 ## 3. 获取代码
 
 ```bash
+sudo mkdir -p /opt
+sudo chown $USER:$USER /opt
 cd /opt
 git clone <your-repo-url> Boring-Financial
 cd /opt/Boring-Financial
@@ -39,16 +50,19 @@ cd /opt/Boring-Financial
 
 ## 4. 初始化项目
 
+仓库提供脚本：
+
 ```bash
 bash scripts/setup-baremetal.sh
 ```
 
-该脚本会：
+脚本职责：
 
-1. 选择 Python 3.11+
-2. 创建 `backend/.venv`
-3. 安装后端依赖
-4. 构建前端静态资源到 `frontend/dist`
+1. 检查 Python 3.11+。
+2. 检查 `uv` 和 `npm` 是否可用。
+3. 在 `backend/` 中执行 `uv sync --extra dev`，根据 `uv.lock` 创建或更新 `.venv`。
+4. 安装前端依赖。
+5. 构建前端静态资源到 `frontend/dist`。
 
 ## 5. 配置后端环境变量
 
@@ -63,18 +77,33 @@ cp backend/.env.bare.example backend/.env
 - `OPENAI_API_KEY`
 - `CORS_ORIGINS`
 
-推荐最小配置：
+低配服务器推荐：
 
 ```env
 DATABASE_URL=sqlite:///./storage/app.db
 TASK_ALWAYS_EAGER=true
+CLASSIFICATION_PROVIDER=composite
+```
+
+如使用 PostgreSQL，请将 `DATABASE_URL` 改为 PostgreSQL 连接串。
+
+外部模型请求由后端进程内的 retry queue worker 统一串行发送。裸机部署建议保持一个 `uvicorn backend.main:app` 服务实例；如果改成多进程或多台后端，需要先把 retry worker 拆成唯一实例或增加数据库锁，避免再次形成多个外部模型发送者。
+
+管理员命令：
+```bash
+cd /opt/Boring-Financial/backend
+uv run bf-admin make-admin <username>
+uv run bf-admin retry-all
+uv run bf-admin retry-all --user-id <id>
 ```
 
 ## 6. systemd 服务
 
 参考模板：
 
-- `infra/systemd/boring-financial-backend.service`
+```text
+infra/systemd/boring-financial-backend.service
+```
 
 推荐内容：
 
@@ -97,7 +126,7 @@ RestartSec=3
 WantedBy=multi-user.target
 ```
 
-部署命令：
+启用服务：
 
 ```bash
 sudo systemctl daemon-reload
@@ -109,7 +138,9 @@ sudo systemctl status boring-financial-backend
 
 参考模板：
 
-- `infra/nginx/boring-financial.bare.conf`
+```text
+infra/nginx/boring-financial.bare.conf
+```
 
 推荐站点配置：
 
@@ -173,40 +204,50 @@ curl http://YOUR_SERVER_IP/health
 curl http://YOUR_SERVER_IP/
 ```
 
+浏览器访问：
+
+```text
+http://YOUR_SERVER_IP/
+```
+
 ## 9. 常见问题
 
-### 9.1 首页 500，但 `/health` 正常
+### 首页 500，但 `/health` 正常
 
-高概率原因：
+常见原因：
 
-- Nginx 无法读取前端静态资源
-- `root` 指向错误
-- 静态资源放在 `/root/...`
-
-处理：
-
-- 把静态资源迁到 `/opt/Boring-Financial/frontend/dist`
-
-### 9.2 systemd 报 `203/EXEC`
+- Nginx 无法读取前端静态资源。
+- `root` 指向错误。
+- 静态资源放在 `/root/...` 导致权限不足。
 
 处理：
 
-- 不直接运行 `uvicorn`
-- 改为 `python -m uvicorn`
+- 确认 `frontend/dist/index.html` 存在。
+- 将项目部署在 `/opt/Boring-Financial`。
+- 确认 Nginx worker 用户可读静态资源。
 
-### 9.3 systemd 报 `217/USER`
-
-处理：
-
-- 检查服务用户是否存在
-- 检查该用户是否有权限访问部署目录
-
-### 9.4 `cors_origins` 解析失败
+### systemd 报 `203/EXEC`
 
 处理：
 
-- 检查 `CORS_ORIGINS` 写法
-- 支持逗号分隔字符串或 JSON 数组
+- 不要直接运行 `uvicorn`。
+- 使用 `python -m uvicorn backend.main:app ...`。
+- 确认虚拟环境路径正确。
+
+### systemd 报 `217/USER`
+
+处理：
+
+- 确认服务配置中的 `User` 和 `Group` 存在。
+- 确认该用户有权限访问 `/opt/Boring-Financial`。
+
+### CORS 配置错误
+
+处理：
+
+- 检查 `CORS_ORIGINS` 写法。
+- 支持逗号分隔字符串或 JSON 数组。
+- 生产环境应包含实际域名或服务器地址。
 
 ## 10. 更新发布
 

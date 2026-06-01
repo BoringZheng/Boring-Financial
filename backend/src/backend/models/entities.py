@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.base_class import Base
@@ -24,6 +24,7 @@ class User(TimestampMixin, Base):
     email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Category(TimestampMixin, Base):
@@ -114,6 +115,9 @@ class Transaction(TimestampMixin, Base):
     auto_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     final_category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
     needs_review: Mapped[bool] = mapped_column(Boolean, default=True)
+    api_retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    api_retry_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    api_retry_last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ClassificationResult(Base):

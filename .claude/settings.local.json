@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(backend/.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('backend/src/backend/services/retry_queue.py'\\).read\\(\\)\\); print\\('retry_queue.py: OK'\\)\")",
+      "Bash(backend/.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('backend/src/backend/core/config.py'\\).read\\(\\)\\); print\\('config.py: OK'\\)\")"
+    ]
+  }
+}

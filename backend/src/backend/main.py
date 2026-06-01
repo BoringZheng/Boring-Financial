@@ -1,34 +1,17 @@
 ﻿from __future__ import annotations
 
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
 
 from backend.api.router import api_router
 from backend.core.config import settings
 from backend.db.base import Base
+from backend.db.runtime_schema import ensure_runtime_schema
 from backend.db.session import engine, SessionLocal
 from backend.services.bootstrap import seed_defaults
-
-
-def ensure_runtime_schema() -> None:
-    inspector = inspect(engine)
-    if "import_batches" not in inspector.get_table_names():
-        return
-
-    columns = {column["name"] for column in inspector.get_columns("import_batches")}
-    statements: list[str] = []
-    if "total_count" not in columns:
-        statements.append("ALTER TABLE import_batches ADD COLUMN total_count INTEGER DEFAULT 0 NOT NULL")
-
-    if not statements:
-        return
-
-    with engine.begin() as connection:
-        for statement in statements:
-            connection.execute(text(statement))
 
 
 @asynccontextmanager
@@ -42,7 +25,26 @@ async def lifespan(_: FastAPI):
         seed_defaults(db)
     finally:
         db.close()
+
+    # Migrate existing timeout transactions into the retry queue
+    from backend.services.retry_queue import migrate_existing_timeouts, run_retry_queue_worker
+    migrate_existing_timeouts()
+
+    # Start background retry worker
+    stop_event = threading.Event()
+    worker = threading.Thread(
+        target=run_retry_queue_worker,
+        args=(stop_event,),
+        daemon=True,
+        name="retry-queue-worker",
+    )
+    worker.start()
+
     yield
+
+    # Shutdown
+    stop_event.set()
+    worker.join(timeout=5)
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

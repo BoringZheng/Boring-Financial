@@ -28,24 +28,20 @@ if [[ -z "${PYTHON_BIN}" ]]; then
   exit 1
 fi
 
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv is required. Install it first: https://docs.astral.sh/uv/getting-started/installation/"
+  exit 1
+fi
+
 if ! command -v npm >/dev/null 2>&1; then
   echo "npm is required"
   exit 1
 fi
 
-if [[ -d "${BACKEND_VENV}" ]]; then
-  if ! "${BACKEND_VENV}/bin/python" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
-    echo "Existing backend/.venv uses Python < 3.11. Remove it and re-run:"
-    echo "rm -rf backend/.venv"
-    exit 1
-  fi
-else
-  "${PYTHON_BIN}" -m venv "${BACKEND_VENV}"
-fi
-
-source "${BACKEND_VENV}/bin/activate"
-python -m pip install --upgrade pip
-python -m pip install -e "${BACKEND_DIR}[dev]"
+(
+  cd "${BACKEND_DIR}"
+  UV_PYTHON="${PYTHON_BIN}" uv sync --extra dev
+)
 
 if [[ ! -f "${BACKEND_DIR}/.env" ]]; then
   cp "${BACKEND_DIR}/.env.bare.example" "${BACKEND_DIR}/.env"

@@ -1,18 +1,22 @@
-﻿# 接口文档
+# 接口文档
 
-## 认证方式
+## 1. 认证方式
 
-- 使用 `Authorization: Bearer <access_token>`
-- 登录与注册返回 `access_token` 和 `refresh_token`
-- 当前版本未实现 refresh token 黑名单，登出为客户端清理令牌
+除注册和登录外，业务接口都需要：
 
-## 核心接口
+```http
+Authorization: Bearer <access_token>
+```
+
+登录和注册返回 `access_token`、`refresh_token` 和当前用户信息。当前版本未实现 refresh token 黑名单，登出由前端清理本地 token。
+
+## 2. Auth
 
 ### `POST /api/auth/register`
 
-注册并直接返回 token。
+注册用户并直接登录。成功返回 token pair 和用户信息。
 
-请求示例：
+请求：
 
 ```json
 {
@@ -22,34 +26,185 @@
 }
 ```
 
+响应：
+
+```json
+{
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "token_type": "bearer",
+  "user": {
+    "id": 1,
+    "username": "boring",
+    "email": "boring@example.com",
+    "is_active": true,
+    "is_admin": false
+  }
+}
+```
+
 ### `POST /api/auth/login`
 
-登录并返回 token。
+使用用户名和密码登录。成功返回 token pair 和用户信息。
+
+请求：
+
+```json
+{
+  "username": "boring",
+  "password": "secret123"
+}
+```
+
+响应：
+
+```json
+{
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "token_type": "bearer",
+  "user": {
+    "id": 1,
+    "username": "boring",
+    "email": "boring@example.com",
+    "is_active": true,
+    "is_admin": false
+  }
+}
+```
+
+### `POST /api/auth/logout`
+
+登出当前用户。当前版本未实现服务端 token 黑名单，登出由前端清理本地 token。
+
+请求：
+
+```json
+{}
+```
+
+响应：
+
+```json
+{
+  "message": "logged out"
+}
+```
 
 ### `GET /api/auth/me`
 
-获取当前用户信息。
+返回当前登录用户。
+
+响应：
+
+```json
+{
+  "id": 1,
+  "username": "boring",
+  "email": "boring@example.com",
+  "is_active": true,
+  "is_admin": false
+}
+```
+
+## 3. Categories
 
 ### `GET /api/categories`
 
-获取系统分类与当前用户分类。
+返回系统分类（`is_system: true`）和当前用户自定义分类（`is_system: false`）。系统分类的 `user_id` 为 `null`。
+
+响应：
+
+```json
+[
+  {
+    "id": 1,
+    "user_id": null,
+    "parent_id": null,
+    "name": "餐饮",
+    "description": null,
+    "is_system": true,
+    "is_active": true
+  },
+  {
+    "id": 12,
+    "user_id": 1,
+    "parent_id": null,
+    "name": "宠物",
+    "description": "猫粮、猫砂等",
+    "is_system": false,
+    "is_active": true
+  }
+]
+```
 
 ### `POST /api/categories`
 
-新增用户分类。
+新增用户自定义分类。用户只能创建自己的分类。
 
-请求示例：
+请求：
 
 ```json
 {
   "name": "宠物",
-  "description": "猫粮、猫砂等"
+  "description": "猫粮、猫砂等",
+  "parent_id": null
 }
+```
+
+响应：返回创建后的 `CategoryRead` 对象，格式同 `GET /api/categories` 中的单项。
+
+### `PATCH /api/categories/{category_id}`
+
+更新分类名称、父级、描述或启用状态。系统分类（`is_system: true`）不能被禁用（`is_active: false`），否则返回 `400`。所有字段均可选。
+
+请求：
+
+```json
+{
+  "name": "学习",
+  "description": "课程、书籍、考试",
+  "parent_id": null,
+  "is_active": true
+}
+```
+
+响应：返回更新后的 `CategoryRead` 对象，格式同 `GET /api/categories` 中的单项。
+
+## 4. Imports
+
+### `GET /api/imports`
+
+返回当前用户的导入批次列表，按创建时间倒序。
+
+响应：
+
+```json
+[
+  {
+    "id": 1,
+    "user_id": 1,
+    "status": "done",
+    "source_count": 2,
+    "total_count": 128,
+    "processed_count": 128,
+    "progress_percent": 100.0,
+    "error_message": null,
+    "created_at": "2026-03-08T10:00:00",
+    "updated_at": "2026-03-08T10:01:00"
+  }
+]
 ```
 
 ### `POST /api/imports`
 
 上传账单文件。字段名固定为 `files`，支持多文件。
+
+```http
+Content-Type: multipart/form-data
+files=<wechat.csv>
+files=<alipay.xlsx>
+```
 
 响应示例：
 
@@ -58,34 +213,100 @@
   "batch": {
     "id": 1,
     "user_id": 1,
-    "status": "done",
+    "status": "processing",
     "source_count": 2,
-    "processed_count": 128,
+    "total_count": 128,
+    "processed_count": 64,
+    "progress_percent": 50,
     "error_message": null,
     "created_at": "2026-03-08T10:00:00",
     "updated_at": "2026-03-08T10:01:00"
   },
-  "message": "import completed"
+  "message": "import started"
 }
+```
+
+### `GET /api/imports/files`
+
+返回当前用户所有上传过的文件列表，用于 Dashboard、交易列表和报表筛选。
+
+响应：
+
+```json
+[
+  {
+    "id": 1,
+    "batch_id": 1,
+    "filename": "wechat.csv",
+    "platform": "WeChat",
+    "status": "done",
+    "error_message": null,
+    "created_at": "2026-03-08T10:00:00"
+  }
+]
 ```
 
 ### `GET /api/imports/{batch_id}`
 
-获取导入批次详情。
+获取导入批次详情。响应格式同 `GET /api/imports` 列表中的单项。
+
+### `DELETE /api/imports/{batch_id}`
+
+删除导入批次及其关联的上传文件、交易和分类结果。成功返回 `204 No Content`。
+
+## 5. Transactions
+
+交易记录中包含两个分类 ID 字段：
+
+- `auto_category_id`：模型或规则自动给出的分类建议，每次重分类会更新。
+- `final_category_id`：人工通过 `PATCH /api/transactions/{id}/category` 修正后的最终分类。非 `null` 时优先于 `auto_category_id`。
+- `needs_review`：`true` 表示分类置信度低于阈值或 `auto_category_id` 为 `null`，需要人工校正。
 
 ### `GET /api/transactions`
 
-查询交易列表，支持参数：
+分页查询交易列表。
 
-- `page`
-- `page_size`
-- `platform`
-- `needs_review`
-- `search`
+支持参数：
+
+- `page`: 页码，默认 `1`
+- `page_size`: 每页数量，默认 `20`，最大 `200`
+- `platform`: 平台，例如 `WeChat`、`Alipay`
+- `needs_review`: 是否待人工校正
+- `search`: 搜索商家、商品或备注
+- `category_id`: 分类筛选，匹配 `final_category_id` 或 `auto_category_id`
+- `date_from`: 起始时间，ISO datetime 字符串
+- `date_to`: 结束时间，ISO datetime 字符串
+- `uploaded_file_ids`: 可重复传入的上传文件 ID
+
+响应结构：
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "platform": "WeChat",
+      "occurred_at": "2026-03-08T12:30:00",
+      "type": "支出",
+      "amount": "35.50",
+      "merchant": "KFC",
+      "item": "午餐",
+      "note": null,
+      "auto_provider": "composite",
+      "auto_reason": "matched category rule",
+      "auto_confidence": "0.9900",
+      "auto_category_id": 2,
+      "final_category_id": null,
+      "needs_review": false
+    }
+  ],
+  "total": 128
+}
+```
 
 ### `PATCH /api/transactions/{transaction_id}/category`
 
-人工修正最终分类。
+人工修正最终分类。设置 `final_category_id`，并可同时标记为已校正（`mark_reviewed: true` 会将 `needs_review` 置为 `false`）。
 
 ```json
 {
@@ -93,6 +314,8 @@
   "mark_reviewed": true
 }
 ```
+
+## 6. Classification
 
 ### `POST /api/classification/reclassify`
 
@@ -105,52 +328,179 @@
 }
 ```
 
-### `GET /api/dashboard/summary`
-
-返回 Dashboard 所需聚合数据：
-
-- 总支出
-- 总收入
-- 净流入
-- 待校正数量
-- Top 商户
-- 分类分布
-- 最近导入任务
-
-### `POST /api/reports`
-
-生成 PDF 报表。
+响应：
 
 ```json
 {
-  "title": "2025 暑期账单报告",
-  "date_from": "2025-07-01T00:00:00",
-  "date_to": "2025-08-31T23:59:59"
+  "processed": 2,
+  "failed": 1,
+  "failures": [
+    {"transaction_id": 3, "error": "model timeout"}
+  ]
+}
+```
+
+支持 provider：
+
+- `rule`
+- `openai_compatible_api`
+- `local_model`
+- `composite`
+
+说明：
+- `openai_compatible_api`、`local_model` 和默认 `composite` 的外部模型请求会先进入统一重试池，接口返回的 `processed` 表示已成功入队或命中缓存，不代表模型请求已同步完成。
+- 交易的 `auto_provider` 可能为 `retry_queue`（等待后台重试）或 `retry_failed`（超时重试耗尽，等待管理员重新入池）。
+
+### `POST /api/classification/retry-all`
+
+管理员接口。将历史外部 API 超时、等待重试或重试失败的交易重新放入统一重试池。请求体可为空对象；传入 `user_id` 时只处理该用户。
+
+请求：
+```json
+{
+  "user_id": 1
+}
+```
+
+响应：
+```json
+{
+  "queued": 12
+}
+```
+
+权限：
+- 需要 Bearer token。
+- 当前用户必须 `is_admin = true`，否则返回 `403`。
+
+### `GET /api/classification/retry-status`
+
+管理员接口。返回重试池聚合状态，用于后台实时监控。接口不会返回商户、备注、交易明细或外部 provider 原始错误。
+
+支持 query 参数：
+- `user_id`：可选，只统计指定用户。
+
+响应：
+```json
+{
+  "queued": 8,
+  "failed": 2,
+  "total": 10,
+  "max_retries": 10,
+  "delay_seconds": 1.0,
+  "poll_seconds": 15.0,
+  "oldest_queued_at": "2026-05-25T12:00:00",
+  "oldest_failed_at": "2026-05-25T12:10:00",
+  "newest_activity_at": "2026-05-25T12:20:00",
+  "providers": [
+    {"provider": "openai_compatible_api", "queued": 8, "failed": 2}
+  ],
+  "retry_counts": [
+    {"retry_count": 0, "queued": 6},
+    {"retry_count": 1, "queued": 2}
+  ]
+}
+```
+
+权限：
+- 需要 Bearer token。
+- 当前用户必须 `is_admin = true`，否则返回 `403`。
+
+## 7. Dashboard
+
+### `GET /api/dashboard/summary`
+
+返回 Dashboard 所需聚合数据。
+
+支持参数：
+
+- `date_from`
+- `date_to`
+- `category_id`
+- `uploaded_file_ids`
+
+返回字段：
+
+- `expense_total`
+- `income_total`
+- `net_total`
+- `transaction_count`
+- `pending_review_count`
+- `top_merchants`
+- `category_breakdown`
+- `expense_trend`
+- `recent_jobs`
+
+## 8. Reports
+
+### `POST /api/reports`
+
+生成 PDF 报表。所有字段均可选：`date_from` 和 `date_to` 接受 ISO datetime 字符串或空字符串（空字符串视为不限），`title` 不传则使用默认标题，`uploaded_file_ids` 不传则涵盖全部导入文件。
+
+请求：
+
+```json
+{
+  "title": "2026 年 5 月账单报告",
+  "date_from": "2026-05-01T00:00:00",
+  "date_to": "2026-05-31T23:59:59",
+  "uploaded_file_ids": [1, 2]
+}
+```
+
+响应：
+
+```json
+{
+  "id": 1,
+  "user_id": 1,
+  "job_id": 1,
+  "title": "2026 年 5 月账单报告",
+  "file_path": "storage/reports/report-1-1.pdf"
 }
 ```
 
 ### `GET /api/reports/{report_id}/download`
 
-下载已生成的 PDF 报表。
+下载已生成的 PDF 报表。接口会校验报表归属，返回 `application/pdf` 文件流。
 
-## 错误码
+> **已知限制**：当前版本未提供 `GET /api/reports` 报表历史列表接口。跟踪状态请参考 [架构文档](./architecture.md) 可扩展方向。
 
-- `400`: 参数非法、用户名重复、系统分类非法更新
-- `401`: 未登录或 token 非法
-- `404`: 资源不存在或不属于当前用户
-- `500`: 解析错误、模型调用失败、文件生成失败
+## 9. 错误码
 
-## 任务轮询约定
+- `400`: 参数非法、用户名重复、系统分类非法更新。
+- `401`: 未登录或 token 非法。
+- `404`: 资源不存在或不属于当前用户。
+- `422`: 请求体格式不符合 schema（例如缺少必填字段、类型错误）。
+- `500`: 解析错误、模型调用失败、文件生成失败。
 
-当前开发版本大部分任务在请求内同步完成，但保留了 Celery 任务形态。若切换到异步模式，建议采用：
+## 10. Health
 
-- 创建任务后返回 `job_id`
-- 前端定时轮询 `GET /api/imports/{id}` 或未来的 `GET /api/jobs/{id}`
-- 状态流转：`queued -> processing -> done / partial_failed / failed`
+### `GET /health`
 
-## OpenAPI
+无需认证，返回服务健康状态。
 
-运行后端后可访问：
+```json
+{
+  "status": "ok"
+}
+```
+
+## 11. 任务状态约定
+
+当前代码同时支持同步开发态和 Celery 任务形态。导入和报表相关状态建议按以下语义展示：
+
+```text
+queued -> processing -> done
+queued -> processing -> partial_failed
+queued -> processing -> failed
+```
+
+前端目前通过轮询 `GET /api/imports` 和 `GET /api/imports/{batch_id}` 展示导入进度。
+
+## 12. OpenAPI
+
+启动后端后可访问：
 
 - `/docs`
 - `/redoc`

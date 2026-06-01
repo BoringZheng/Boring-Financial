@@ -1,152 +1,172 @@
-# 开发者文档
+# 开发文档
 
-## 1. Who should read this
+## 1. 面向读者
 
-本文档面向接手本仓库的开发者，目标是让你在不依赖额外说明的情况下完成以下事务：
+本文档面向接手本仓库的开发者，目标是帮助你快速完成：
 
-- 理解仓库结构与主要模块职责
-- 在本地启动前后端并联调
-- 了解当前项目在开发态和裸机部署态的差异
-- 快速定位常见问题
+- 理解 monorepo 结构和模块职责。
+- 使用 `uv` 启动后端开发环境。
+- 启动 Vue 3 前端并完成前后端联调。
+- 定位常见开发问题。
 
 ## 2. 仓库结构
 
 ```text
-backend/   FastAPI 后端、数据库模型、分类逻辑、报表生成、测试
+backend/   FastAPI 后端、SQLAlchemy 模型、分类服务、报表生成、测试
 frontend/  Vue 3 + Vite 前端
-infra/     Docker Compose、Nginx、systemd、模型服务模板
+infra/     Docker Compose、Nginx、systemd、mock model service
 docs/      架构、接口、开发、部署、测试文档
 legacy/    旧版脚本
-scripts/   本地开发与裸机部署辅助脚本
+scripts/   本地开发与部署辅助脚本
 ```
 
 关键目录：
 
-- `backend/src/backend/api/`：HTTP 路由层
-- `backend/src/backend/services/`：核心业务逻辑
-- `backend/src/backend/models/`：SQLAlchemy 模型
-- `backend/src/backend/core/`：配置、安全、Celery 配置
-- `frontend/src/pages/`：页面级组件
-- `frontend/src/api/client.ts`：统一 API 客户端
+- `backend/pyproject.toml`: 后端包元数据和依赖声明。
+- `backend/uv.lock`: 后端依赖锁文件，开发安装以它为准。
+- `backend/src/backend/api/`: HTTP 路由和 JWT 鉴权依赖。
+- `backend/src/backend/services/`: 核心业务逻辑，含启动引导（`bootstrap.py`）自动初始化默认分类和规则种子。
+- `backend/src/backend/models/`: SQLAlchemy 数据模型。
+- `backend/src/backend/schemas/`: Pydantic 请求/响应模型。
+- `backend/src/backend/tasks/`: Celery 任务入口。
+- `frontend/src/layouts/`: 应用级布局。
+- `frontend/src/pages/`: 页面级组件。
+- `frontend/src/api/client.ts`: Axios API 客户端。
 
-## 3. 技术栈与当前实现取向
+## 3. 技术栈
 
 后端：
 
+- Python 3.11+
+- uv
 - FastAPI
 - SQLAlchemy 2.x
 - Pydantic Settings
 - Alembic
-- `fpdf2`
+- Celery + Redis
+- fpdf2
+- pytest
 
 前端：
 
+- Node.js 20+
+- npm
 - Vue 3
 - Vite 7
 - TypeScript
 - Pinia
 - Vue Router
 - Element Plus
+- ECharts
 
-## 4. 开发环境要求
+## 4. 后端本地开发
 
-建议：
+后端使用 `uv` 管理依赖和虚拟环境。不要手动写 `pip install -e ".[dev]"` 作为常规启动方式。
 
-- Python 3.11+
-- Node.js 20+
-- npm 10+
+### 4.1 安装 uv
 
-可选：
+确认本机已安装：
 
-- PostgreSQL 16+
-- Redis 7+
-- Docker / Docker Compose
+```bash
+uv --version
+```
 
-Windows 开发建议：
+如果没有安装，按 uv 官方文档安装后再继续。
 
-- 使用 PowerShell
-- 如果 `npm` 被执行策略拦截，改用 `npm.cmd`
+### 4.2 轻量 SQLite 启动
 
-## 5. 后端本地开发
+适合课程 demo、本地快速验收和低配机器。
 
-### 5.1 创建虚拟环境
+PowerShell:
+
+```powershell
+cd backend
+Copy-Item .env.bare.example .env
+uv sync --extra dev
+uv run uvicorn backend.main:app --reload
+```
+
+Bash:
 
 ```bash
 cd backend
-python -m venv .venv
+cp .env.bare.example .env
+uv sync --extra dev
+uv run uvicorn backend.main:app --reload
 ```
 
-Windows:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-Linux/macOS:
-
-```bash
-source .venv/bin/activate
-```
-
-### 5.2 安装依赖
-
-```bash
-pip install --upgrade pip
-pip install -e ".[dev]"
-```
-
-### 5.3 准备环境变量
-
-开发环境模板：
-
-```bash
-copy .env.example .env
-```
-
-或：
-
-```bash
-cp .env.example .env
-```
-
-最关键的几个变量：
-
-- `DATABASE_URL`
-- `CLASSIFICATION_PROVIDER`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `TASK_ALWAYS_EAGER`
-- `CORS_ORIGINS`
-
-开发机如果只想先跑通，不想装 PostgreSQL，可以把：
+`.env.bare.example` 默认使用：
 
 ```env
 DATABASE_URL=sqlite:///./storage/app.db
 TASK_ALWAYS_EAGER=true
 ```
 
-### 5.4 启动后端
+应用启动时会创建运行期表和默认分类。
+
+### 4.3 PostgreSQL + Redis 启动
+
+先从仓库根目录启动依赖：
 
 ```bash
-uvicorn backend.main:app --reload
+cd infra
+docker compose up -d postgres redis
 ```
 
-默认健康检查：
+再启动后端。
 
-```text
-http://127.0.0.1:8000/health
+PowerShell:
+
+```powershell
+cd ..\backend
+Copy-Item .env.example .env
+uv sync --extra dev
+uv run uvicorn backend.main:app --reload
 ```
 
-## 6. 前端本地开发
+Bash:
 
-### 6.1 安装依赖
+```bash
+cd ../backend
+cp .env.example .env
+uv sync --extra dev
+uv run uvicorn backend.main:app --reload
+```
+
+### 4.4 常用后端命令
+
+```bash
+uv run pytest
+uv run pytest --cov=backend
+uv run alembic upgrade head
+uv run celery -A backend.core.celery_app.celery_app worker -l info
+uv run bf-admin retry-all
+uv run bf-admin retry-all --user-id <id>
+uv run bf-admin make-admin <username>
+```
+
+说明：当前本地快速启动不强制要求 Alembic migration，因为 `backend.main` 的 lifespan 会调用 SQLAlchemy metadata 创建运行期表。Alembic 保留给后续正式迁移版本管理。
+
+外部模型请求默认进入统一 `retry_queue`，由后端 lifespan 中启动的后台 worker 串行发送。开发时如果看到交易来源为 `retry_queue`，表示等待后台处理；`retry_failed` 表示超时重试耗尽。管理员可在设置页点击“一键重试历史超时”，或运行 `uv run bf-admin retry-all`。首次使用后台管理员按钮前，运行 `uv run bf-admin make-admin <username>`。
+
+## 5. 前端本地开发
+
+### 5.1 安装依赖
 
 ```bash
 cd frontend
 npm install
 ```
 
-### 6.2 启动开发服务器
+### 5.2 启动开发服务器
+
+Windows PowerShell 推荐：
+
+```powershell
+npm.cmd run dev
+```
+
+Bash:
 
 ```bash
 npm run dev
@@ -158,16 +178,73 @@ npm run dev
 http://127.0.0.1:5173
 ```
 
-当前前端开发代理已经配置为：
+前端代理：
 
-- `/api` -> `http://127.0.0.1:8000`
+```text
+/api -> http://127.0.0.1:8000
+```
 
-这意味着本地联调时只要后端跑在 8000 端口即可。
+### 5.3 构建前端
 
-## 7. 开发者须知
+```bash
+npm.cmd run build
+```
 
-如果你想对本项目做出贡献，你应当：
-1. 从main branch fork一个分支，并只在你的分支上进行改动。
-2. 你应当只改动\backend \docs \frontend 中的文件。
-3. 你应当参照README.md中的文件索引，对于你的改动在对应的文档中做出说明。
-4. 如果你已经测试完成你的分支并认为其可以上线，那么你应当提一个pull request而非直接commit to main branch。
+非 Windows：
+
+```bash
+npm run build
+```
+
+## 6. 前端设计约定
+
+当前前端采用专业后台系统风格：
+
+- 深色侧边栏：`#06233D` / `#041A2E`
+- 主色：`#00A884`
+- 页面背景：`#F5F7FA`
+- 卡片背景：`#FFFFFF`
+- 卡片圆角：8px
+- 图表：ECharts
+- 基础组件：Element Plus
+
+页面统一使用 `.page-shell`、`.page-heading`、`.panel`、`.card` 等全局样式。新增页面应优先复用现有样式和 Element Plus 组件。
+
+## 7. 开发注意事项
+
+- 后端依赖变更后，更新 `backend/pyproject.toml` 并重新生成 `backend/uv.lock`。
+- 不要绕过 `uv.lock` 手动维护后端依赖环境。
+- 不要改动后端接口路径，除非同步更新 `docs/api.md` 和前端调用。
+- 低配服务器优先，避免高频模型调用和大规模全量查询。
+- 文档、页面文案和代码注释统一使用 UTF-8。
+
+## 8. 常见问题
+
+### PowerShell 无法运行 npm
+
+使用：
+
+```powershell
+npm.cmd run dev
+npm.cmd run build
+```
+
+### Vite 报 `spawn EPERM`
+
+通常是本机或沙箱限制阻止 esbuild 子进程启动。确认 Node.js 安装正常，并在允许子进程的终端中运行。
+
+### 前端请求 401
+
+检查：
+
+- 是否已登录。
+- `localStorage` 中是否存在 `bf_access_token`。
+- 后端 `SECRET_KEY` 是否变化导致旧 token 失效。
+
+### 导入任务一直处理中
+
+检查：
+
+- `TASK_ALWAYS_EAGER` 配置。
+- Redis/Celery worker 是否运行。
+- 后端日志中是否有文件解析或模型调用错误。

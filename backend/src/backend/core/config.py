@@ -24,16 +24,22 @@ class Settings(BaseSettings):
     openai_api_base: str = "https://api.openai.com/v1"
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
-    model_timeout_seconds: float = 30.0
+    model_timeout_seconds: float = 60.0
     model_connect_timeout_seconds: float = 5.0
     model_max_retries: int = 2
-    model_max_output_tokens: int = 80
+    model_max_output_tokens: int = 500
+    model_disable_thinking: bool = True
     import_classification_workers: int = 2
     import_progress_commit_interval: int = 10
     local_model_api_base: str = "http://model-service:8001/v1"
     local_model_api_key: str = "EMPTY"
     local_model_name: str = "Qwen2.5-7B-Instruct"
     low_confidence_threshold: float = 0.75
+    # Retry queue settings — api failures during import / reclassify are queued
+    # and retried one-at-a-time by a background thread.
+    retry_queue_max_retries: int = 10
+    retry_queue_delay_seconds: float = 1.0
+    retry_queue_poll_seconds: float = 15.0
     storage_dir: str = "./storage"
     task_always_eager: bool = True
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:5173"])
