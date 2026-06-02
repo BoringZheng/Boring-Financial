@@ -54,11 +54,13 @@ const summary = ref<DashboardSummary>({
 })
 
 const filters = reactive<{
-  date_range: [string, string] | []
+  date_from: string
+  date_to: string
   category_id?: number
   uploaded_file_ids: number[]
 }>({
-  date_range: [],
+  date_from: '',
+  date_to: '',
   category_id: undefined,
   uploaded_file_ids: [],
 })
@@ -78,16 +80,14 @@ const savingsRate = computed(() => {
 const metrics = computed(() => [
   { label: '本月收入', value: money(summary.value.income_total), foot: '已导入账单统计', tone: 'positive' },
   { label: '本月支出', value: money(summary.value.expense_total), foot: '按当前筛选范围', tone: 'negative' },
-  { label: '储蓄率', value: savingsRate.value, foot: `净流入 ${money(summary.value.net_total)}`, tone: 'primary' },
+  { label: '储蓄率', value: savingsRate.value, foot: `净流入 ${money(summary.value.net_total)}`, tone: 'info' },
   { label: '未分类交易', value: `${summary.value.pending_review_count} 笔`, foot: `共 ${summary.value.transaction_count} 笔交易`, tone: 'warning' },
 ])
 
 function buildSummaryParams() {
   const params = new URLSearchParams()
-  if (filters.date_range.length === 2) {
-    params.append('date_from', filters.date_range[0])
-    params.append('date_to', filters.date_range[1])
-  }
+  if (filters.date_from) params.append('date_from', filters.date_from)
+  if (filters.date_to) params.append('date_to', filters.date_to)
   if (filters.category_id !== undefined) {
     params.append('category_id', String(filters.category_id))
   }
@@ -217,7 +217,8 @@ async function loadSummary() {
 }
 
 async function resetFilters() {
-  filters.date_range = []
+  filters.date_from = ''
+  filters.date_to = ''
   filters.category_id = undefined
   filters.uploaded_file_ids = []
   await loadSummary()
@@ -250,11 +251,15 @@ onBeforeUnmount(() => {
     <section class="panel card filter-card">
       <div class="toolbar-grid filter-grid">
         <el-date-picker
-          v-model="filters.date_range"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
+          v-model="filters.date_from"
+          type="date"
+          placeholder="开始日期"
+          value-format="YYYY-MM-DDTHH:mm:ss"
+        />
+        <el-date-picker
+          v-model="filters.date_to"
+          type="date"
+          placeholder="结束日期"
           value-format="YYYY-MM-DDTHH:mm:ss"
         />
         <el-select v-model="filters.category_id" clearable filterable placeholder="选择分类">
@@ -358,6 +363,10 @@ onBeforeUnmount(() => {
 
 .metric-primary {
   border-left-color: var(--color-primary);
+}
+
+.metric-info {
+  border-left-color: var(--color-info);
 }
 
 .metric-warning {
