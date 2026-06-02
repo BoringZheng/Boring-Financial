@@ -38,6 +38,7 @@ flowchart LR
 - `pages/CategoriesPage.vue`: 系统分类和用户自定义分类。
 - `pages/ReportsPage.vue`: 报表条件、摘要预览、PDF 生成和下载。
 - `pages/SettingsPage.vue`: provider、阈值和模型配置展示。
+- `pages/PersonalityPage.vue`: 消费人格测评、16 型人格画像、财务健康评分和自评偏差分析。
 - `api/client.ts`: Axios 客户端，统一注入 Bearer Token。
 - `stores/auth.ts`: 登录态、token、本地存储和当前用户。
 
@@ -65,6 +66,8 @@ flowchart LR
 - `services/classifiers.py`: 规则、缓存、外部模型、本地模型与混合分类链路。
 - `services/analytics.py`: Dashboard 聚合。
 - `services/reports.py`: PDF 报表构建，含 Unicode 字体自动检测。
+- `api/routes_personality.py`: 消费人格画像、心理测验题目和自评对比。
+- `services/personality.py`: 四维人格计算（现时偏好/心理账户/炫耀性消费/开放性）、16 型人格分类、财务健康评分（储蓄率/收入稳定性/消费多样性/支出波动/应急能力）和测验评分与偏差分析。
 - `services/bootstrap.py`: 启动时初始化默认分类和 `category_map.csv` 规则种子。
 
 ## 4. 核心数据流
@@ -99,7 +102,226 @@ flowchart LR
 - 查询、更新、下载前验证资源归属。
 - 系统分类使用 `user_id = null`，用户分类使用当前用户 ID。
 
-## 6. 分类器抽象
+### 5.1 数据库 ER 图
+
+```mermaid
+erDiagram
+    users ||--o{ categories : "user_id"
+    users ||--o{ category_rules : "user_id"
+    users ||--o{ import_batches : "user_id"
+    users ||--o{ transactions : "user_id"
+    users ||--o{ classification_caches : "user_id"
+    users ||--o{ report_jobs : "user_id"
+    users ||--o{ generated_reports : "user_id"
+    categories ||--o{ categories : "parent_id"
+    categories ||--o{ category_rules : "category_id"
+    categories ||--o{ transactions : "auto_category_id"
+    categories ||--o{ transactions : "final_category_id"
+    categories ||--o{ classification_results : "category_id"
+    categories ||--o{ classification_caches : "category_id"
+    import_batches ||--o{ uploaded_files : "batch_id"
+    import_batches ||--o{ transactions : "batch_id"
+    uploaded_files ||--o{ transactions : "uploaded_file_id"
+    transactions ||--o{ classification_results : "transaction_id"
+    report_jobs ||--o{ generated_reports : "job_id"
+
+    users {
+        int id PK
+        string username UK
+        string email UK
+        string hashed_password
+        bool is_active
+        bool is_admin
+    }
+
+    categories {
+        int id PK
+        int user_id FK "null=system"
+        int parent_id FK "self-ref"
+        string name
+        string description
+        bool is_system
+        bool is_active
+    }
+
+    category_rules {
+        int id PK
+        int user_id FK
+        int category_id FK
+        string subcategory_name
+        int priority
+        string merchant_pattern
+        string keyword_pattern
+        bool is_regex
+    }
+
+    import_batches {
+        int id PK
+        int user_id FK
+        string status
+        int source_count
+        int total_count
+        int processed_count
+    }
+
+    uploaded_files {
+        int id PK
+        int batch_id FK
+        string filename
+        string stored_path
+        string platform
+        string status
+    }
+
+    transactions {
+        int id PK
+        int user_id FK
+        int batch_id FK
+        int uploaded_file_id FK
+        string platform
+        datetime occurred_at
+        string type
+        decimal amount
+        string merchant
+        string item
+        text note
+        string dedupe_hash UK
+        int auto_category_id FK
+        int final_category_id FK
+        decimal auto_confidence
+        string auto_provider
+        bool needs_review
+        int api_retry_count
+    }
+
+    classification_results {
+        int id PK
+        int transaction_id FK
+        int category_id FK
+        string subcategory_name
+        decimal confidence
+        text reason
+        string provider
+        text raw_response
+    }
+
+    classification_caches {
+        int id PK
+        int user_id FK
+        string provider
+        string text_hash UK
+        int category_id FK
+        decimal confidence
+        text reason
+    }
+
+    report_jobs {
+        int id PK
+        int user_id FK
+        string status
+        datetime date_from
+        datetime date_to
+    }
+
+    generated_reports {
+        int id PK
+        int user_id FK
+        int job_id FK
+        string title
+        string file_path
+    }
+```
+
+## 6. 核心流程时序图
+
+### 6.1 账单导入与分类
+
+```mermaid
+sequenceDiagram
+    actor U as 用户
+    participant FE as Vue 前端
+    participant API as FastAPI
+    participant Parser as ParserRegistry
+    participant Norm as Normalizer
+    participant CLS as CompositeClassifier
+    participant DB as PostgreSQL
+
+    U->>FE: 上传账单文件
+    FE->>API: POST /api/imports (multipart)
+    API->>DB: 创建 import_batch + uploaded_file
+    API-->>FE: batch + "import started"
+
+    API->>Parser: 解析文件 (CSV / XLSX)
+    Parser->>Norm: 规范化交易字段
+    Norm->>Norm: 生成 dedupe_hash 去重
+    Norm-->>Parser: 规范化后的交易列表
+    Parser-->>API: 统一格式交易数据
+
+    loop 每笔交易
+        API->>CLS: classify_transaction()
+        CLS->>CLS: 规则匹配 → 缓存查询 → 外部模型
+        CLS-->>API: 分类结果 (category_id, confidence, provider)
+        API->>DB: 写入 transaction + classification_result
+    end
+
+    API->>DB: 更新 batch 状态为 done
+    FE->>API: 轮询 GET /api/imports 查看进度
+```
+
+### 6.2 用户认证
+
+```mermaid
+sequenceDiagram
+    actor U as 用户
+    participant FE as Vue 前端
+    participant API as FastAPI
+    participant DB as PostgreSQL
+
+    U->>FE: 输入用户名 / 密码
+    FE->>API: POST /api/auth/login
+    API->>DB: 查询 users 表
+    DB-->>API: user 记录 (含 hashed_password)
+    API->>API: passlib 验证密码
+    API->>API: 生成 JWT (access + refresh)
+    API-->>FE: token pair + user info
+    FE->>FE: 存储 token 到 localStorage
+
+    Note over FE, API: 后续请求自动在 Authorization header 携带 Bearer Token
+
+    FE->>API: GET /api/transactions
+    API->>API: 解码 JWT, 提取 user_id
+    API->>DB: 查询 WHERE user_id = current_user.id
+    DB-->>API: 该用户的交易数据
+    API-->>FE: 分页交易列表
+```
+
+### 6.3 人工校正工作流
+
+```mermaid
+sequenceDiagram
+    actor U as 用户
+    participant FE as Vue 前端
+    participant API as FastAPI
+    participant DB as PostgreSQL
+
+    U->>FE: 进入分类校正工作台
+    FE->>API: GET /api/transactions?needs_review=true
+    API->>DB: 查询低置信度 / 未分类交易
+    DB-->>API: 待校正交易列表
+    API-->>FE: 交易 + 模型分类建议
+
+    U->>FE: 选择交易，查看分类详情
+    FE-->>U: 展示 auto_provider / auto_reason / auto_confidence
+
+    U->>FE: 选择正确分类并确认
+    FE->>API: PATCH /api/transactions/{id}/category
+    API->>DB: 更新 final_category_id, needs_review=false
+    DB-->>API: 确认写入
+    API-->>FE: 更新后的交易数据
+    FE-->>U: 从待校正队列中移除
+```
+
+## 7. 分类器抽象
 
 分类器统一输出：
 
@@ -127,9 +349,9 @@ flowchart LR
 - 管理员可通过系统设置页或 `POST /api/classification/retry-all` 把历史超时、等待重试和重试失败交易重新放入池子。
 - 管理员可通过 `GET /api/classification/retry-status` 查看重试池聚合状态；该接口只返回数量、provider 分布和重试次数分布，不返回交易文本或原始错误。
 
-## 7. 异步任务设计
+## 8. 异步任务设计
 
-代码中预留 Celery 任务入口：
+Celery 任务入口：
 
 - `import.process_batch`
 - `classification.reclassify`
@@ -137,7 +359,9 @@ flowchart LR
 
 开发和低配服务器可使用 `TASK_ALWAYS_EAGER=true` 同步执行，减少运行组件；生产环境可改为 Redis + Celery worker 异步消费。
 
-## 8. 可扩展方向
+外部模型重试池已在后端 lifespan 中以后台线程形式运行（`retry_queue.py`），对 `auto_provider = "retry_queue"` 的交易串行重试，与 Celery 异步任务互为补充。
+
+## 9. 可扩展方向
 
 - 增加 `GET /api/reports` 报表历史列表。
 - 将 `CategoryRule` 暴露为规则管理功能。

@@ -414,22 +414,101 @@ files=<alipay.xlsx>
 
 支持参数：
 
-- `date_from`
-- `date_to`
-- `category_id`
-- `uploaded_file_ids`
+- `date_from`: 起始时间，ISO datetime 字符串，可选
+- `date_to`: 结束时间，ISO datetime 字符串，可选
+- `category_id`: 按分类筛选，可选
+- `uploaded_file_ids`: 按上传文件筛选，可重复传入，可选
 
-返回字段：
+响应：
 
-- `expense_total`
-- `income_total`
-- `net_total`
-- `transaction_count`
-- `pending_review_count`
-- `top_merchants`
-- `category_breakdown`
-- `expense_trend`
-- `recent_jobs`
+```json
+{
+  "expense_total": "12345.67",
+  "income_total": "20000.00",
+  "net_total": "7654.33",
+  "transaction_count": 128,
+  "pending_review_count": 5,
+  "top_merchants": [
+    {
+      "merchant": "KFC",
+      "amount": "1234.50",
+      "transaction_count": 15
+    },
+    {
+      "merchant": "美团",
+      "amount": "876.00",
+      "transaction_count": 12
+    }
+  ],
+  "category_breakdown": [
+    {
+      "category_id": 2,
+      "category_name": "餐饮",
+      "amount": "3456.00",
+      "transaction_count": 42
+    },
+    {
+      "category_id": 5,
+      "category_name": "交通",
+      "amount": "1234.00",
+      "transaction_count": 18
+    }
+  ],
+  "expense_trend": [
+    {
+      "date": "2026-03-01",
+      "expense": "456.00",
+      "income": "0.00"
+    },
+    {
+      "date": "2026-03-02",
+      "expense": "312.50",
+      "income": "20000.00"
+    }
+  ],
+  "recent_jobs": [
+    {
+      "id": 1,
+      "status": "done",
+      "processed_count": 128,
+      "total_count": 128,
+      "source_count": 2,
+      "progress_percent": 100.0
+    }
+  ]
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `expense_total` | string (Decimal) | 支出合计 |
+| `income_total` | string (Decimal) | 收入合计 |
+| `net_total` | string (Decimal) | 净收支（收入 - 支出） |
+| `transaction_count` | int | 交易总笔数 |
+| `pending_review_count` | int | 待人工校正笔数 |
+| `top_merchants` | array | 支出 Top 10 商户，按金额降序 |
+| `top_merchants[].merchant` | string | 商户名称 |
+| `top_merchants[].amount` | string (Decimal) | 该商户支出合计 |
+| `top_merchants[].transaction_count` | int | 该商户交易笔数 |
+| `category_breakdown` | array | 分类支出分布，按金额降序 |
+| `category_breakdown[].category_id` | int \| null | 分类 ID |
+| `category_breakdown[].category_name` | string | 分类名称 |
+| `category_breakdown[].amount` | string (Decimal) | 该分类支出合计 |
+| `category_breakdown[].transaction_count` | int | 该分类交易笔数 |
+| `expense_trend` | array | 每日收支趋势，按日期升序 |
+| `expense_trend[].date` | string | 日期 (YYYY-MM-DD) |
+| `expense_trend[].expense` | string (Decimal) | 当日支出 |
+| `expense_trend[].income` | string (Decimal) | 当日收入 |
+| `recent_jobs` | array | 最近 5 个导入批次 |
+| `recent_jobs[].id` | int | 批次 ID |
+| `recent_jobs[].status` | string | 批次状态 |
+| `recent_jobs[].processed_count` | int | 已处理笔数 |
+| `recent_jobs[].total_count` | int | 总笔数 |
+| `recent_jobs[].source_count` | int | 源文件数 |
+| `recent_jobs[].progress_percent` | float | 进度百分比 |
+
 
 ## 8. Reports
 
@@ -466,7 +545,209 @@ files=<alipay.xlsx>
 
 > **已知限制**：当前版本未提供 `GET /api/reports` 报表历史列表接口。跟踪状态请参考 [架构文档](./architecture.md) 可扩展方向。
 
-## 9. 错误码
+## 9. Personality
+
+消费人格分析模块基于行为经济学理论，从用户交易数据中提取四维人格画像，并提供自评测验与数据画像的偏差对比。
+
+理论依据：
+- **现时偏好 (Time Preference)**：基于 Laibson 双曲贴现模型，通过储蓄率和小额交易占比衡量延迟满足倾向。
+- **心理账户 (Mental Accounting)**：基于 Thaler 心理账户理论，通过分类支出分布的方差衡量消费分区的严格程度。
+- **炫耀性消费 (Conspicuous Consumption)**：基于 Veblen 炫耀性消费理论，通过餐饮/服饰/数码/娱乐等品类的支出占比衡量地位驱动消费。
+- **消费开放性 (Openness)**：基于大五人格 Openness 维度，通过商户 Shannon 多样性指数和近期新商户比例衡量消费探索倾向。
+
+人格分类体系包含 16 型三维编码（如 `P-S-U` 貔貅型、`I-E-V` 消费主义代言人等），每型含名称、标语、名人名言和学术依据。
+
+### `GET /api/personality/profile`
+
+返回当前用户的消费人格画像和财务健康评分。需要认证。
+
+响应：
+
+```json
+{
+  "personality": {
+    "code": "P-S-U",
+    "name": "貔貅型",
+    "tagline": "只进不出，省钱界的传奇生物",
+    "quote": "我的钱不是花掉了，只是暂时变成了用得上的东西。",
+    "match_percent": 78.5,
+    "secondary_code": "P-E-U",
+    "secondary_name": "旅行青蛙",
+    "dimensions": [
+      {
+        "name": "time_preference",
+        "value": 32.1,
+        "side": "Patient",
+        "label": "延迟满足型",
+        "theory_ref": "Laibson 双曲贴现模型",
+        "interpretation": "你倾向于延迟满足，注重长期财务规划。你的消费决策受即时诱惑的影响较小，更关注未来的财务安全。"
+      },
+      {
+        "name": "mental_accounting",
+        "value": 45.3,
+        "side": "Flexible",
+        "label": "灵活调配",
+        "theory_ref": "Thaler 心理账户理论",
+        "interpretation": "你的心理账户较为灵活，不同类目的支出可以自由调配。"
+      },
+      {
+        "name": "conspicuous_consumption",
+        "value": 28.7,
+        "side": "Utilitarian",
+        "label": "实用主义",
+        "theory_ref": "Veblen 炫耀性消费理论",
+        "interpretation": "你是实用主义消费者，消费以功能和性价比为导向。"
+      },
+      {
+        "name": "openness",
+        "value": 41.2,
+        "side": "Stable",
+        "label": "习惯稳定",
+        "theory_ref": "大五人格 Openness 维度",
+        "interpretation": "你的消费习惯较为稳定，倾向于在熟悉的商家和品类中消费。"
+      }
+    ]
+  },
+  "financial_health": {
+    "total_score": 72.4,
+    "grade": "B",
+    "dimensions": [
+      {"name": "savings_rate", "value": 80.0, "label": "储蓄率"},
+      {"name": "income_stability", "value": 65.0, "label": "收入稳定性"},
+      {"name": "spending_diversity", "value": 53.3, "label": "消费多样性"},
+      {"name": "expense_volatility", "value": 78.0, "label": "支出波动"},
+      {"name": "emergency_capacity", "value": 85.7, "label": "应急能力"}
+    ],
+    "suggestions": [
+      "你的消费多样性较低，生活支出较为单一，可以适当增加自我投资和体验类消费。"
+    ]
+  },
+  "has_data": true
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `personality.code` | string | 三维人格编码，如 `P-S-U` |
+| `personality.name` | string | 人格类型中文名称 |
+| `personality.tagline` | string | 一句话描述 |
+| `personality.quote` | string | 人格代表性引言 |
+| `personality.match_percent` | float | 与人格原型的匹配度 (0-100) |
+| `personality.secondary_code` | string | 次近人格编码 |
+| `personality.secondary_name` | string | 次近人格中文名称 |
+| `personality.dimensions` | array | 四维人格评分，各 0-100 |
+| `personality.dimensions[].name` | string | 维度名 |
+| `personality.dimensions[].value` | float | 维度分值 (0-100, 50 为中性) |
+| `personality.dimensions[].side` | string | 英文维度侧标 (Patient/Impulsive 等) |
+| `personality.dimensions[].label` | string | 中文维度标签 |
+| `personality.dimensions[].theory_ref` | string | 学术理论依据 |
+| `personality.dimensions[].interpretation` | string | 该维度得分的中文解释 |
+| `financial_health.total_score` | float | 财务健康总分 (0-100) |
+| `financial_health.grade` | string | 等级 (S/A/B/C/D) |
+| `financial_health.dimensions` | array | 五维健康分项 |
+| `financial_health.suggestions` | array of string | 改进建议列表 |
+| `has_data` | bool | 是否有交易数据（无数据时返回默认中位画像） |
+
+### `GET /api/personality/quiz`
+
+返回 10 道消费心理测验题。每题包含 4 个选项，各维度分布为：现时偏好 3 题、心理账户 2 题、炫耀性消费 2 题、消费开放性 2 题、综合 1 题。无需认证。
+
+响应：
+
+```json
+[
+  {
+    "id": 1,
+    "dimension": "time_preference",
+    "text": "看到「限时优惠」你会？",
+    "options": [
+      {"value": 1, "text": "完全无视，我只买需要的"},
+      {"value": 2, "text": "会看一眼，但很少被影响"},
+      {"value": 3, "text": "经常会因为限时而下单"},
+      {"value": 4, "text": "立刻下单，万一错过了呢"}
+    ]
+  }
+]
+```
+
+### `POST /api/personality/quiz/result`
+
+提交测验答案，返回自评画像与数据驱动画像的对比分析。需要认证。
+
+请求：
+
+```json
+{
+  "answers": [2, 1, 3, 4, 2, 1, 2, 3, 1, 2]
+}
+```
+
+`answers` 为 10 个 1-4 的整数，顺序对应测验题目顺序。
+
+响应：
+
+```json
+{
+  "self_assessment": {
+    "dimensions": {
+      "time_preference": 33.3,
+      "mental_accounting": 44.4,
+      "conspicuous_consumption": 55.6,
+      "openness": 66.7
+    }
+  },
+  "data_profile": {
+    "code": "P-S-U",
+    "name": "貔貅型",
+    "tagline": "只进不出，省钱界的传奇生物",
+    "quote": "我的钱不是花掉了，只是暂时变成了用得上的东西。",
+    "match_percent": 78.5,
+    "secondary_code": "P-E-U",
+    "secondary_name": "旅行青蛙",
+    "dimensions": [
+      {
+        "name": "time_preference",
+        "value": 32.1,
+        "side": "Patient",
+        "label": "延迟满足型",
+        "theory_ref": "Laibson 双曲贴现模型",
+        "interpretation": "你倾向于延迟满足，注重长期财务规划。"
+      }
+    ]
+  },
+  "comparison": {
+    "cosine_similarity": 0.8521,
+    "biggest_gap": {
+      "dimension": "openness",
+      "self_score": 66.7,
+      "data_score": 41.2,
+      "gap": 25.5,
+      "analysis": "你自认为在「消费开放性」维度上得分较高（67），但实际消费数据得分较低（41）。这可能意味着你高估了自己在这一维度的消费倾向。",
+      "theory_ref": "大五人格 Openness 维度"
+    },
+    "bias_analysis": "你的自评人格与数据人格高度一致。说明你对自身消费习惯有较准确的认知。最大的认知偏差出现在「消费开放性」维度（差距 25.5 分），你对该维度的自我认知与实际消费数据存在明显差异。"
+  }
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `self_assessment.dimensions` | object | 自评四维得分 (0-100)，key 为维度名 |
+| `data_profile` | PersonalityProfile | 基于交易数据的人格画像，结构同 `/profile` 中的 `personality` |
+| `comparison.cosine_similarity` | float | 自评向量与数据向量的余弦相似度 (0-1) |
+| `comparison.biggest_gap.dimension` | string | 偏差最大的维度名 |
+| `comparison.biggest_gap.self_score` | float | 该维度自评得分 |
+| `comparison.biggest_gap.data_score` | float | 该维度数据得分 |
+| `comparison.biggest_gap.gap` | float | 绝对差值 |
+| `comparison.biggest_gap.analysis` | string | 偏差方向与心理学解释 |
+| `comparison.biggest_gap.theory_ref` | string | 学术理论依据 |
+| `comparison.bias_analysis` | string | 综合偏差分析文本 |
+
+## 10. 错误码
 
 - `400`: 参数非法、用户名重复、系统分类非法更新。
 - `401`: 未登录或 token 非法。
@@ -474,7 +755,7 @@ files=<alipay.xlsx>
 - `422`: 请求体格式不符合 schema（例如缺少必填字段、类型错误）。
 - `500`: 解析错误、模型调用失败、文件生成失败。
 
-## 10. Health
+## 11. Health
 
 ### `GET /health`
 
@@ -486,7 +767,7 @@ files=<alipay.xlsx>
 }
 ```
 
-## 11. 任务状态约定
+## 12. 任务状态约定
 
 当前代码同时支持同步开发态和 Celery 任务形态。导入和报表相关状态建议按以下语义展示：
 
@@ -498,7 +779,7 @@ queued -> processing -> failed
 
 前端目前通过轮询 `GET /api/imports` 和 `GET /api/imports/{batch_id}` 展示导入进度。
 
-## 12. OpenAPI
+## 13. OpenAPI
 
 启动后端后可访问：
 
