@@ -310,7 +310,7 @@ class ReportBuilder:
 
         pdf.output(str(file_path))
 
-        report = GeneratedReport(user_id=user_id, job_id=report_job.id, title=title or "财务报告", file_path=str(file_path))
+        report = GeneratedReport(user_id=user_ids[0], job_id=report_job.id, title=title or "财务报告", file_path=str(file_path))
         db.add(report)
         db.commit()
         db.refresh(report)

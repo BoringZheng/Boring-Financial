@@ -39,3 +39,24 @@ export interface CategoryItem {
   is_system: boolean
   is_active: boolean
 }
+
+export interface Organization {
+  id: number
+  name: string
+  created_by_user_id: number
+  plan: string | null
+  subscription_status: string | null
+  created_at: string
+  updated_at: string
+  role: 'owner' | 'admin' | 'member'
+}
+
+export interface OrganizationMember {
+  id: number
+  organization_id: number
+  user_id: number
+  role: 'owner' | 'admin' | 'member'
+  username: string
+  created_at: string
+  updated_at: string
+}

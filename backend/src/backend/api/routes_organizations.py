@@ -28,6 +28,20 @@ from backend.services.organizations import (
 router = APIRouter()
 
 
+def _require_org_admin(db: Session, org_id: int, user_id: int) -> None:
+    try:
+        verify_org_owner_or_admin(db, org_id, user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+
+
+def _require_org_member(db: Session, org_id: int, user_id: int) -> None:
+    try:
+        verify_org_membership(db, org_id, user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+
+
 @router.get("", response_model=list[OrganizationWithRole])
 def list_organizations(
     current_user: User = Depends(get_current_user),
@@ -57,7 +71,7 @@ def update_org(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> OrganizationRead:
-    verify_org_owner_or_admin(db, organization_id, current_user.id)
+    _require_org_admin(db, organization_id, current_user.id)
     org = db.get(OrganizationModel, organization_id)
     if org is None:
         raise HTTPException(status_code=404, detail="organization not found")
@@ -78,7 +92,7 @@ def list_members(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> list[OrganizationMemberRead]:
-    verify_org_membership(db, organization_id, current_user.id)
+    _require_org_member(db, organization_id, current_user.id)
     return [OrganizationMemberRead(**m) for m in get_organization_members(db, organization_id)]
 
 
@@ -89,7 +103,7 @@ def add_org_member(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> OrganizationMemberRead:
-    verify_org_owner_or_admin(db, organization_id, current_user.id)
+    _require_org_admin(db, organization_id, current_user.id)
     try:
         member = add_member(db, organization_id, payload.username)
         user = db.get(User, member.user_id)
@@ -111,7 +125,7 @@ def update_member(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> OrganizationMemberRead:
-    verify_org_owner_or_admin(db, organization_id, current_user.id)
+    _require_org_admin(db, organization_id, current_user.id)
     try:
         member = update_member_role(db, organization_id, user_id, payload.role)
         user = db.get(User, member.user_id)
@@ -132,7 +146,7 @@ def remove_org_member(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> None:
-    verify_org_owner_or_admin(db, organization_id, current_user.id)
+    _require_org_admin(db, organization_id, current_user.id)
     try:
         remove_member(db, organization_id, user_id)
     except ValueError as exc:
