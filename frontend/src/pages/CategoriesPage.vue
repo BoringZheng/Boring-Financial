@@ -101,18 +101,18 @@ async function createCategory() {
         <h2>分类列表</h2>
         <span>共 {{ categories.length }} 个分类</span>
       </div>
-      <el-table :data="categories" v-loading="loading" empty-text="暂无分类">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="名称" min-width="160" />
-        <el-table-column prop="description" label="描述" min-width="240">
+      <el-table :data="categories" v-loading="loading" empty-text="暂无分类" height="calc(100vh - 400px)">
+        <el-table-column prop="id" label="ID" min-width="60" />
+        <el-table-column prop="name" label="名称" min-width="120" />
+        <el-table-column prop="description" label="描述" min-width="160">
           <template #default="{ row }">{{ row.description || '-' }}</template>
         </el-table-column>
-        <el-table-column label="类型" width="130">
+        <el-table-column label="类型" min-width="90">
           <template #default="{ row }">
             <el-tag :type="row.is_system ? 'info' : 'success'">{{ row.is_system ? '系统分类' : '自定义分类' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="启用状态" width="120">
+        <el-table-column label="启用状态" min-width="90">
           <template #default="{ row }">
             <el-tag :type="row.is_active ? 'success' : 'info'" class="status-tag">{{ row.is_active ? '启用' : '停用' }}</el-tag>
           </template>

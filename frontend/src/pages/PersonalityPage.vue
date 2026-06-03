@@ -250,7 +250,7 @@ function renderProfileRadar() {
     legend: { show: false },
     radar: {
       center: ['50%', '50%'],
-      radius: '65%',
+      radius: '80%',
       indicator: dims.map((d) => ({ name: dimensionLabel(d), max: 100 })),
       axisName: { color: '#334155', fontSize: 13 },
     },
@@ -331,7 +331,7 @@ function renderHealthRadar() {
     legend: { show: false },
     radar: {
       center: ['50%', '53%'],
-      radius: '54%',
+      radius: '72%',
       indicator: dims.map((d) => ({ name: wrapChartLabel(healthDimensionLabel(d)), max: 100 })),
       axisName: {
         color: '#334155',
@@ -391,6 +391,8 @@ watch(activeTab, async (tab) => {
     resizeCharts()
     if (quizResult.value) renderDualRadar()
   } else if (tab === 'health') {
+    healthRadarChart?.dispose()
+    healthRadarChart = null
     initCharts()
     resizeCharts()
     renderHealthRadar()
@@ -427,7 +429,7 @@ watch(activeTab, async (tab) => {
                   <span>匹配度</span>
                   <span>{{ Math.round(profile.match_percent) }}%</span>
                 </div>
-                <el-progress :percentage="Math.round(profile.match_percent)" :stroke-width="8" :show-text="false" />
+                <el-progress :percentage="Math.round(profile.match_percent)" :stroke-width="8" :show-text="false" color="#00A884" />
               </div>
               <div class="personality-quote">"{{ profile.quote }}"</div>
               <div v-if="profile.secondary_code" class="secondary-type">
@@ -470,21 +472,23 @@ watch(activeTab, async (tab) => {
             <p>以下 10 道题将帮助你了解自己对消费习惯的自我认知。请根据真实感受选择最符合的选项，完成后与数据驱动的人格画像进行对比。</p>
           </div>
 
-          <div v-for="(q, idx) in questions" :key="q.id" class="panel card quiz-item">
-            <div class="quiz-question-header">
-              <span class="quiz-number">{{ idx + 1 }}</span>
-              <div>
-                <div class="quiz-question-text">{{ q.text }}</div>
-                <div class="quiz-dimension-tag">
-                  <el-tag size="small" type="info">{{ dimensionLabel({ name: q.dimension } as DimensionScore) }}</el-tag>
+          <div class="quiz-scroll-area">
+            <div v-for="(q, idx) in questions" :key="q.id" class="panel card quiz-item">
+              <div class="quiz-question-header">
+                <span class="quiz-number">{{ idx + 1 }}</span>
+                <div>
+                  <div class="quiz-question-text">{{ q.text }}</div>
+                  <div class="quiz-dimension-tag">
+                    <el-tag size="small" type="info">{{ dimensionLabel({ name: q.dimension } as DimensionScore) }}</el-tag>
+                  </div>
                 </div>
               </div>
+              <el-radio-group v-model="answers[q.id]" class="quiz-options">
+                <el-radio v-for="opt in q.options" :key="opt.value" :value="opt.value" class="quiz-option-item">
+                  {{ opt.text }}
+                </el-radio>
+              </el-radio-group>
             </div>
-            <el-radio-group v-model="answers[q.id]" class="quiz-options">
-              <el-radio v-for="opt in q.options" :key="opt.value" :value="opt.value" class="quiz-option-item">
-                {{ opt.text }}
-              </el-radio>
-            </el-radio-group>
           </div>
 
           <div class="quiz-actions">
@@ -552,22 +556,23 @@ watch(activeTab, async (tab) => {
         <el-empty v-if="!hasData && !loading" description="暂无足够交易数据，请先导入账单后再查看财务健康评分" :image-size="120" />
 
         <template v-if="health && hasData">
-          <!-- grade badge -->
-          <div class="health-hero">
-            <div class="grade-badge" :style="{ borderColor: gradeColor(health.grade), color: gradeColor(health.grade) }">
-              <span class="grade-letter">{{ health.grade }}</span>
-              <span class="grade-total">{{ Math.round(health.total_score) }} 分</span>
+          <!-- grade + radar side by side -->
+          <div class="health-top-row">
+            <div class="panel card health-grade-card">
+              <div class="grade-badge" :style="{ borderColor: gradeColor(health.grade), color: gradeColor(health.grade) }">
+                <span class="grade-letter">{{ health.grade }}</span>
+                <span class="grade-total">{{ Math.round(health.total_score) }} 分</span>
+              </div>
+              <div class="grade-desc">
+                <div class="grade-title">财务健康等级</div>
+                <div class="grade-text">{{ gradeText(health.grade) }}</div>
+              </div>
             </div>
-            <div class="grade-desc">
-              <div class="grade-title">财务健康等级</div>
-              <div class="grade-text">{{ gradeText(health.grade) }}</div>
-            </div>
-          </div>
 
-          <!-- health radar -->
-          <div class="panel card" style="margin-top: 16px">
-            <div class="section-title"><h2>五维健康雷达</h2></div>
-            <div ref="healthRadarRef" class="chart-shell health-chart-shell"></div>
+            <div class="panel card health-radar-card">
+              <div class="section-title"><h2>五维健康雷达</h2></div>
+              <div ref="healthRadarRef" class="chart-shell health-chart-shell"></div>
+            </div>
           </div>
 
           <!-- suggestions -->
@@ -599,8 +604,8 @@ watch(activeTab, async (tab) => {
 .personality-card {
   padding: 28px 24px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #00A884 0%, #007A60 100%);
-  color: #fff;
+  background: #ffffff;
+  color: #1f2937;
   display: flex;
   flex-direction: column;
 }
@@ -629,7 +634,7 @@ watch(activeTab, async (tab) => {
   padding: 14px 16px;
   background: rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 18px;
   font-style: italic;
   line-height: 1.6;
 }
@@ -639,7 +644,7 @@ watch(activeTab, async (tab) => {
   padding: 8px 12px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 /* ------------------------------------------------------------------ */
@@ -736,6 +741,16 @@ watch(activeTab, async (tab) => {
 /* ------------------------------------------------------------------ */
 /* quiz */
 /* ------------------------------------------------------------------ */
+.quiz-scroll-area {
+  height: calc(100vh - 320px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+  margin-bottom: 16px;
+}
+
 .quiz-intro {
   padding: 18px 20px;
   margin-bottom: 16px;
@@ -920,11 +935,24 @@ watch(activeTab, async (tab) => {
 /* ------------------------------------------------------------------ */
 /* health */
 /* ------------------------------------------------------------------ */
-.health-hero {
+.health-top-row {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.health-grade-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 24px;
-  padding: 20px 0;
+  justify-content: center;
+  gap: 20px;
+}
+
+.health-radar-card {
+  display: flex;
+  flex-direction: column;
 }
 
 .grade-badge {
@@ -1000,8 +1028,8 @@ watch(activeTab, async (tab) => {
 }
 
 .health-chart-shell {
-  height: 420px;
-  min-height: 420px;
+  height: 300px;
+  min-height: 300px;
 }
 
 .personality-tabs {

@@ -143,7 +143,11 @@ function renderCharts() {
     color: ['#00A884', '#EF4444'],
     tooltip: { trigger: 'axis' },
     legend: { top: 0, right: 0, data: ['收入', '支出'] },
-    grid: { left: 42, right: 20, top: 46, bottom: 30 },
+    grid: { left: 68, right: 48, top: 46, bottom: 60 },
+    dataZoom: [
+      { type: 'inside', start: 0, end: 100 },
+      { type: 'slider', start: 0, end: 100, height: 20, bottom: 8, left: 68, right: 48, showDetail: false, fillerColor: 'rgba(0,168,132,0.1)', borderColor: '#E5E7EB', handleStyle: { color: '#00A884' } },
+    ],
     xAxis: {
       type: 'category',
       boundaryGap: false,
@@ -177,14 +181,15 @@ function renderCharts() {
   categoryChart.setOption({
     color: ['#00A884', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444', '#14B8A6', '#64748B'],
     tooltip: { trigger: 'item', formatter: '{b}<br/>¥{c} ({d}%)' },
-    legend: { type: 'scroll', bottom: 0, icon: 'circle' },
+    legend: { type: 'scroll', orient: 'vertical', right: 0, top: 'middle', icon: 'circle' },
     series: [
       {
         name: '支出分类',
         type: 'pie',
         radius: ['52%', '76%'],
-        center: ['50%', '43%'],
-        label: { formatter: '{b}\n{d}%', color: '#334155' },
+        center: ['40%', '50%'],
+        label: { show: false },
+        emphasis: { label: { show: true, formatter: '{b}\n{d}%', fontSize: 13 } },
         data: summary.value.category_breakdown.map((item) => ({
           name: item.category_name || '未分类',
           value: Number(item.amount),
@@ -255,12 +260,14 @@ onBeforeUnmount(() => {
           type="date"
           placeholder="开始日期"
           value-format="YYYY-MM-DDTHH:mm:ss"
+          style="width: 100%"
         />
         <el-date-picker
           v-model="filters.date_to"
           type="date"
           placeholder="结束日期"
           value-format="YYYY-MM-DDTHH:mm:ss"
+          style="width: 100%"
         />
         <el-select v-model="filters.category_id" clearable filterable placeholder="选择分类">
           <el-option v-for="category in categories" :key="category.id" :label="category.name" :value="category.id" />
@@ -346,7 +353,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .filter-grid {
-  grid-template-columns: minmax(260px, 1.1fr) minmax(170px, 0.8fr) minmax(280px, 1.3fr) 108px 88px;
+  grid-template-columns: minmax(100px, 0.9fr) minmax(100px, 0.9fr) minmax(100px, 0.8fr) minmax(120px, 1.2fr) 90px 76px;
 }
 
 .metric-card {
