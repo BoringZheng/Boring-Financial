@@ -195,17 +195,17 @@ class TestAdminSeparation:
         org_owner = _make_user(db_session, "orgowner")
         org = create_organization(db_session, "测试组织", org_owner.id)
 
-        # sys_admin is NOT a member of the org, should get 403
+        # sys_admin is NOT a member of the org, should get 403 on family dashboard
         resp = client.get(
             f"/api/dashboard/summary?organization_id={org.id}",
             headers=_auth_headers_for(sys_admin),
         )
         assert resp.status_code == 403
 
-        # But sys_admin CAN access global retry-all
-        resp = client.post(
-            "/api/classification/retry-all",
-            json={},
+        # Personal dashboard still works for sys_admin without org_id
+        resp = client.get(
+            "/api/dashboard/summary",
             headers=_auth_headers_for(sys_admin),
         )
         assert resp.status_code == 200
+        assert "expense_total" in resp.json()
