@@ -8,6 +8,7 @@ import {
   RefreshRight,
   DataAnalysis,
   MagicStick,
+  Refresh,
 } from '@element-plus/icons-vue'
 import {
   fetchOrganizations,
@@ -160,12 +161,27 @@ async function handleUpdatePlan() {
 }
 
 function formatMoney(val: string | number): string {
-  return Number(val).toFixed(2)
+  return `¥${Number(val).toFixed(2)}`
+}
+
+function roleLabel(role: string): string {
+  return role === 'owner' ? '拥有者' : role === 'admin' ? '管理员' : '成员'
 }
 </script>
 
 <template>
-  <div class="org-page">
+  <div class="page-shell">
+    <div class="page-heading">
+      <div>
+        <h1>家庭组织</h1>
+        <p>管理家庭账单组织，查看聚合财务概览与消费人格分析。</p>
+      </div>
+      <div class="heading-actions">
+        <el-button :icon="Refresh" :loading="loading" @click="loadOrgData">刷新数据</el-button>
+        <el-button type="primary" :icon="Plus" @click="showCreateDialog = true">新建家庭</el-button>
+      </div>
+    </div>
+
     <div v-if="organizations.length === 0" class="empty-state">
       <el-result icon="info" title="尚未加入任何家庭组织"
         sub-title="创建一个家庭组织来开始管理家庭账单">
@@ -176,30 +192,57 @@ function formatMoney(val: string | number): string {
     </div>
 
     <template v-else>
-      <div class="org-header">
-        <el-select v-model="selectedOrgId" placeholder="选择家庭" style="width: 260px" size="large">
-          <el-option v-for="org in organizations" :key="org.id" :label="org.name" :value="org.id">
-            <span>{{ org.name }}</span>
-            <el-tag size="small" style="margin-left: 8px"
-              :type="org.role === 'owner' ? '' : 'info'">
-              {{ org.role === 'owner' ? '拥有者' : org.role === 'admin' ? '管理员' : '成员' }}
-            </el-tag>
-          </el-option>
-        </el-select>
-        <el-button @click="showCreateDialog = true">新建家庭</el-button>
-      </div>
-
-      <el-divider />
+      <!-- Org selector -->
+      <section class="panel card filter-card">
+        <div class="toolbar-grid org-filter-grid">
+          <el-select v-model="selectedOrgId" placeholder="选择家庭" size="large">
+            <el-option v-for="org in organizations" :key="org.id" :label="org.name" :value="org.id">
+              <span>{{ org.name }}</span>
+              <el-tag size="small" style="margin-left: 8px"
+                :type="org.role === 'owner' ? '' : 'info'">
+                {{ roleLabel(org.role) }}
+              </el-tag>
+            </el-option>
+          </el-select>
+        </div>
+      </section>
 
       <div v-if="selectedOrg" v-loading="loading">
-        <el-card v-if="isOwnerOrAdmin" class="info-card" shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span>组织信息</span>
-              <el-button v-if="!editingPlan" size="small" @click="editingPlan = true">编辑</el-button>
-              <el-button v-else size="small" type="primary" @click="handleUpdatePlan">保存</el-button>
-            </div>
-          </template>
+        <!-- Metrics -->
+        <div v-if="dashboardData" class="metric-grid org-metrics">
+          <section class="panel metric-card metric-negative">
+            <div class="metric-label">总支出</div>
+            <div class="metric-value">{{ formatMoney(dashboardData.expense_total) }}</div>
+            <div class="metric-foot">家庭合计</div>
+          </section>
+          <section class="panel metric-card metric-positive">
+            <div class="metric-label">总收入</div>
+            <div class="metric-value">{{ formatMoney(dashboardData.income_total) }}</div>
+            <div class="metric-foot">家庭合计</div>
+          </section>
+          <section class="panel metric-card">
+            <div class="metric-label">净流入</div>
+            <div class="metric-value">{{ formatMoney(dashboardData.net_total) }}</div>
+            <div class="metric-foot">收入减支出</div>
+          </section>
+          <section class="panel metric-card metric-info">
+            <div class="metric-label">交易笔数</div>
+            <div class="metric-value">{{ dashboardData.transaction_count }}</div>
+            <div class="metric-foot">家庭全部成员</div>
+          </section>
+        </div>
+
+        <!-- Organization info -->
+        <section v-if="isOwnerOrAdmin" class="panel card">
+          <div class="section-title">
+            <h2>组织信息</h2>
+            <span v-if="!editingPlan">
+              <el-button size="small" @click="editingPlan = true">编辑</el-button>
+            </span>
+            <span v-else>
+              <el-button size="small" type="primary" @click="handleUpdatePlan">保存</el-button>
+            </span>
+          </div>
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item label="名称">
               <span v-if="!editingPlan">{{ selectedOrg.name }}</span>
@@ -218,36 +261,14 @@ function formatMoney(val: string | number): string {
               <el-input v-else v-model="selectedOrg.subscription_status" size="small" />
             </el-descriptions-item>
           </el-descriptions>
-        </el-card>
+        </section>
 
-        <el-card v-if="dashboardData" class="info-card" shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span><el-icon><DataAnalysis /></el-icon> 家庭财务概览</span>
-            </div>
-          </template>
-          <el-row :gutter="16">
-            <el-col :span="6">
-              <el-statistic title="总支出" :value="formatMoney(dashboardData.expense_total)" prefix="¥" />
-            </el-col>
-            <el-col :span="6">
-              <el-statistic title="总收入" :value="formatMoney(dashboardData.income_total)" prefix="¥" />
-            </el-col>
-            <el-col :span="6">
-              <el-statistic title="净流入" :value="formatMoney(dashboardData.net_total)" prefix="¥" />
-            </el-col>
-            <el-col :span="6">
-              <el-statistic title="交易笔数" :value="dashboardData.transaction_count" />
-            </el-col>
-          </el-row>
-        </el-card>
-
-        <el-card v-if="personalityData?.personality" class="info-card" shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span><el-icon><MagicStick /></el-icon> 家庭消费人格</span>
-            </div>
-          </template>
+        <!-- Personality -->
+        <section v-if="personalityData?.personality" class="panel card">
+          <div class="section-title">
+            <h2><el-icon><MagicStick /></el-icon> 家庭消费人格</h2>
+            <span>基于家庭全体成员数据计算</span>
+          </div>
           <div class="personality-display">
             <div class="personality-main">
               <span class="personality-code">{{ personalityData.personality.code }}</span>
@@ -257,12 +278,11 @@ function formatMoney(val: string | number): string {
             <div class="personality-dims">
               <div v-for="dim in personalityData.personality.dimensions" :key="dim.name" class="dim-row">
                 <span class="dim-label">{{ dim.label }}</span>
-                <el-progress :percentage="dim.value" :stroke-width="8" :show-text="false"
-                  style="flex:1; margin: 0 12px" />
+                <el-progress :percentage="dim.value" :stroke-width="8" :show-text="false" color="#00A884" />
                 <span class="dim-value">{{ dim.value.toFixed(0) }}</span>
               </div>
             </div>
-            <div v-if="personalityData.financial_health" style="margin-top: 16px">
+            <div v-if="personalityData.financial_health" class="health-tag-row">
               <el-tag size="large"
                 :type="personalityData.financial_health.grade === 'A' || personalityData.financial_health.grade === 'S' ? 'success' : 'warning'">
                 财务健康: {{ personalityData.financial_health.grade }}
@@ -270,18 +290,15 @@ function formatMoney(val: string | number): string {
               </el-tag>
             </div>
           </div>
-        </el-card>
+        </section>
 
-        <el-card class="info-card" shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span><el-icon><UserFilled /></el-icon> 家庭成员 ({{ members.length }})</span>
-              <el-button v-if="isOwnerOrAdmin" size="small" type="primary"
-                @click="showAddMemberDialog = true">
-                <el-icon><Plus /></el-icon> 添加成员
-              </el-button>
-            </div>
-          </template>
+        <!-- Members -->
+        <section class="panel card">
+          <div class="section-title">
+            <h2><el-icon><UserFilled /></el-icon> 家庭成员 ({{ members.length }})</h2>
+            <el-button v-if="isOwnerOrAdmin" size="small" type="primary"
+              :icon="Plus" @click="showAddMemberDialog = true">添加成员</el-button>
+          </div>
           <el-table :data="members" stripe size="small">
             <el-table-column prop="username" label="用户名" />
             <el-table-column prop="role" label="角色" width="150">
@@ -294,7 +311,7 @@ function formatMoney(val: string | number): string {
                   </el-select>
                 </template>
                 <el-tag v-else size="small" :type="row.role === 'owner' ? '' : 'info'">
-                  {{ row.role === 'owner' ? '拥有者' : row.role === 'admin' ? '管理员' : '成员' }}
+                  {{ roleLabel(row.role) }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -305,19 +322,22 @@ function formatMoney(val: string | number): string {
               </template>
             </el-table-column>
           </el-table>
-        </el-card>
+        </section>
 
-        <el-card v-if="isOwnerOrAdmin" class="info-card" shadow="hover">
-          <template #header>
-            <div class="card-header"><span>管理操作</span></div>
-          </template>
+        <!-- Admin actions -->
+        <section v-if="isOwnerOrAdmin" class="panel card">
+          <div class="section-title">
+            <h2>管理操作</h2>
+            <span>将失败的分类任务重新放入重试池</span>
+          </div>
           <el-button :icon="RefreshRight" @click="handleRetryAll">
             重试所有失败的分类
           </el-button>
-        </el-card>
+        </section>
       </div>
     </template>
 
+    <!-- Dialogs -->
     <el-dialog v-model="showCreateDialog" title="创建家庭组织" width="420px">
       <el-form @submit.prevent="handleCreateOrg">
         <el-form-item label="家庭名称">
@@ -345,18 +365,77 @@ function formatMoney(val: string | number): string {
 </template>
 
 <style scoped>
-.org-page { max-width: 960px; margin: 0 auto; }
-.empty-state { margin-top: 80px; }
-.org-header { display: flex; align-items: center; gap: 16px; }
-.info-card { margin-bottom: 16px; }
-.card-header { display: flex; align-items: center; justify-content: space-between; }
-.card-header .el-icon { margin-right: 6px; vertical-align: middle; }
-.personality-display { padding: 8px 0; }
-.personality-main { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
-.personality-code { font-size: 24px; font-weight: 700; color: #00A884; font-family: monospace; }
-.personality-name { font-size: 18px; font-weight: 600; }
-.personality-tagline { color: #8c8c8c; font-size: 14px; }
-.dim-row { display: flex; align-items: center; margin-bottom: 8px; }
-.dim-label { width: 100px; font-size: 13px; color: #8c8c8c; }
-.dim-value { width: 36px; text-align: right; font-size: 13px; font-weight: 600; }
+.heading-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.empty-state {
+  margin-top: 60px;
+}
+
+.org-filter-grid {
+  grid-template-columns: minmax(240px, 320px);
+}
+
+.org-metrics {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.personality-display {
+  padding: 8px 0;
+}
+
+.personality-main {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.personality-code {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-primary);
+  font-family: monospace;
+}
+
+.personality-name {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.personality-tagline {
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.personality-dims {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dim-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dim-label {
+  width: 100px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.dim-value {
+  width: 36px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.health-tag-row {
+  margin-top: 16px;
+}
 </style>
