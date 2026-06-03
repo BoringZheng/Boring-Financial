@@ -180,7 +180,7 @@ class Organization(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(128))
-    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     plan: Mapped[str | None] = mapped_column(String(64), default="free", nullable=True)
     subscription_status: Mapped[str | None] = mapped_column(String(32), default="active", nullable=True)
 
