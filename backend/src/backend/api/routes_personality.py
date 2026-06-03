@@ -25,12 +25,25 @@ router = APIRouter()
 
 @router.get("/profile", response_model=PersonalityResponse)
 def get_profile(
+    organization_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> PersonalityResponse:
-    profile_data = compute_personality_profile(db, current_user.id)
-    health_data = compute_financial_health(db, current_user.id)
-    has_data = db.scalar(select(Transaction.id).where(Transaction.user_id == current_user.id).limit(1)) is not None
+    if organization_id is not None:
+        from backend.services.organizations import get_member_user_ids, verify_org_membership
+        try:
+            verify_org_membership(db, organization_id, current_user.id)
+        except ValueError:
+            raise HTTPException(status_code=403, detail="not a member of this organization")
+        user_ids = get_member_user_ids(db, organization_id)
+    else:
+        user_ids = [current_user.id]
+
+    profile_data = compute_personality_profile(db, user_ids)
+    health_data = compute_financial_health(db, user_ids)
+    has_data = db.scalar(
+        select(Transaction.id).where(Transaction.user_id.in_(user_ids)).limit(1)
+    ) is not None
 
     return PersonalityResponse(
         personality=PersonalityProfile(**profile_data),

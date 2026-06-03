@@ -12,13 +12,13 @@ from backend.models import Category, ImportBatch, Transaction
 
 def dashboard_summary(
     db: Session,
-    user_id: int,
+    user_ids: list[int],
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     category_id: int | None = None,
     uploaded_file_ids: list[int] | None = None,
 ) -> dict:
-    query = select(Transaction).where(Transaction.user_id == user_id)
+    query = select(Transaction).where(Transaction.user_id.in_(user_ids))
     if date_from is not None:
         query = query.where(Transaction.occurred_at >= date_from)
     if date_to is not None:
@@ -78,7 +78,7 @@ def dashboard_summary(
         category_map[category_name]["category_id"] = resolved_category_id
 
     jobs = db.scalars(
-        select(ImportBatch).where(ImportBatch.user_id == user_id).order_by(ImportBatch.created_at.desc()).limit(5)
+        select(ImportBatch).where(ImportBatch.user_id.in_(user_ids)).order_by(ImportBatch.created_at.desc()).limit(5)
     ).all()
 
     return {
