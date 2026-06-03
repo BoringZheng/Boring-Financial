@@ -36,7 +36,8 @@ type ReportRead = {
 
 const form = reactive({
   title: '',
-  date_range: [] as [string, string] | [],
+  date_from: '',
+  date_to: '',
   uploaded_file_ids: [] as number[],
 })
 const importFiles = ref<ImportFileOption[]>([])
@@ -77,10 +78,8 @@ function formatImportFileLabel(file: ImportFileOption) {
 
 function buildSummaryParams() {
   const params = new URLSearchParams()
-  if (form.date_range.length === 2) {
-    params.append('date_from', form.date_range[0])
-    params.append('date_to', form.date_range[1])
-  }
+  if (form.date_from) params.append('date_from', form.date_from)
+  if (form.date_to) params.append('date_to', form.date_to)
   form.uploaded_file_ids.forEach((fileId) => params.append('uploaded_file_ids', String(fileId)))
   return params
 }
@@ -88,8 +87,8 @@ function buildSummaryParams() {
 function reportPayload() {
   return {
     title: form.title || null,
-    date_from: form.date_range.length === 2 ? form.date_range[0] : null,
-    date_to: form.date_range.length === 2 ? form.date_range[1] : null,
+    date_from: form.date_from || null,
+    date_to: form.date_to || null,
     uploaded_file_ids: form.uploaded_file_ids,
   }
 }
@@ -106,9 +105,14 @@ function renderChart() {
     color: ['#00A884', '#EF4444', '#3B82F6'],
     tooltip: { trigger: 'axis' },
     legend: { top: 0, right: 0, data: ['收入', '支出', '结余'] },
-    grid: { left: 42, right: 18, top: 44, bottom: 30 },
+    grid: { left: 68, right: 48, top: 44, bottom: 60 },
+    dataZoom: [
+      { type: 'inside', start: 0, end: 100 },
+      { type: 'slider', start: 0, end: 100, height: 20, bottom: 8, left: 68, right: 48, showDetail: false, fillerColor: 'rgba(0,168,132,0.1)', borderColor: '#E5E7EB', handleStyle: { color: '#00A884' } },
+    ],
     xAxis: {
       type: 'category',
+      boundaryGap: false,
       data: summary.value.expense_trend.map((item) => item.date),
       axisLine: { lineStyle: { color: '#E5E7EB' } },
       axisLabel: { color: '#6B7280' },
@@ -119,8 +123,20 @@ function renderChart() {
       axisLabel: { color: '#6B7280' },
     },
     series: [
-      { name: '收入', type: 'bar', data: summary.value.expense_trend.map((item) => Number(item.income)) },
-      { name: '支出', type: 'bar', data: summary.value.expense_trend.map((item) => Number(item.expense)) },
+      {
+        name: '收入',
+        type: 'line',
+        smooth: true,
+        data: summary.value.expense_trend.map((item) => Number(item.income)),
+        areaStyle: { color: 'rgba(0, 168, 132, 0.12)' },
+      },
+      {
+        name: '支出',
+        type: 'line',
+        smooth: true,
+        data: summary.value.expense_trend.map((item) => Number(item.expense)),
+        areaStyle: { color: 'rgba(239, 68, 68, 0.08)' },
+      },
       {
         name: '结余',
         type: 'line',
@@ -227,12 +243,18 @@ onBeforeUnmount(() => {
       <div class="toolbar-grid report-grid">
         <el-input v-model="form.title" placeholder="报表标题，例如：2026 年 5 月账单报告" />
         <el-date-picker
-          v-model="form.date_range"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
+          v-model="form.date_from"
+          type="date"
+          placeholder="开始日期"
           value-format="YYYY-MM-DDTHH:mm:ss"
+          style="width: 100%"
+        />
+        <el-date-picker
+          v-model="form.date_to"
+          type="date"
+          placeholder="结束日期"
+          value-format="YYYY-MM-DDTHH:mm:ss"
+          style="width: 100%"
         />
         <el-select
           v-model="form.uploaded_file_ids"
@@ -313,7 +335,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .report-grid {
-  grid-template-columns: minmax(240px, 1.1fr) minmax(260px, 1.1fr) minmax(260px, 1.2fr) 104px 104px;
+  grid-template-columns: minmax(110px, 1.2fr) minmax(90px, 0.9fr) minmax(90px, 0.9fr) minmax(110px, 1.1fr) 90px 90px;
 }
 
 .report-main {

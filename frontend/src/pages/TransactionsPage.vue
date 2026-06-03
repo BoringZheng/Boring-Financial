@@ -57,7 +57,8 @@ const filters = reactive({
   platform: '',
   category_id: undefined as number | undefined,
   uploaded_file_ids: [] as number[],
-  date_range: [] as [string, string] | [],
+  date_from: '',
+  date_to: '',
   review_status: '',
 })
 
@@ -71,10 +72,8 @@ function buildTransactionParams() {
   if (filters.search) params.append('search', filters.search)
   if (filters.platform) params.append('platform', filters.platform)
   if (filters.category_id !== undefined) params.append('category_id', String(filters.category_id))
-  if (filters.date_range.length === 2) {
-    params.append('date_from', filters.date_range[0])
-    params.append('date_to', filters.date_range[1])
-  }
+  if (filters.date_from) params.append('date_from', filters.date_from)
+  if (filters.date_to) params.append('date_to', filters.date_to)
   if (filters.review_status === 'needs_review') params.append('needs_review', 'true')
   if (filters.review_status === 'confirmed') params.append('needs_review', 'false')
   filters.uploaded_file_ids.forEach((fileId) => params.append('uploaded_file_ids', String(fileId)))
@@ -169,7 +168,8 @@ async function resetFilters() {
   filters.platform = ''
   filters.category_id = undefined
   filters.uploaded_file_ids = []
-  filters.date_range = []
+  filters.date_from = ''
+  filters.date_to = ''
   filters.review_status = ''
   await loadTransactions()
 }
@@ -201,19 +201,25 @@ onMounted(async () => {
     <section class="panel card">
       <div class="toolbar-grid filter-grid">
         <el-date-picker
-          v-model="filters.date_range"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
+          v-model="filters.date_from"
+          type="date"
+          placeholder="开始日期"
           value-format="YYYY-MM-DDTHH:mm:ss"
+          style="width: 100%"
         />
-        <el-select v-model="filters.platform" clearable placeholder="来源平台">
+        <el-date-picker
+          v-model="filters.date_to"
+          type="date"
+          placeholder="结束日期"
+          value-format="YYYY-MM-DDTHH:mm:ss"
+          style="width: 100%"
+        />
+        <el-select v-model="filters.platform" clearable placeholder="来源平台" style="width: 100%">
           <el-option label="全部平台" value="" />
           <el-option label="微信账单" value="WeChat" />
           <el-option label="支付宝账单" value="Alipay" />
         </el-select>
-        <el-select v-model="filters.category_id" clearable filterable placeholder="分类">
+        <el-select v-model="filters.category_id" clearable filterable placeholder="分类" style="width: 100%">
           <el-option v-for="category in categories" :key="category.id" :label="category.name" :value="category.id" />
         </el-select>
         <el-select
@@ -224,50 +230,51 @@ onMounted(async () => {
           clearable
           filterable
           placeholder="导入文件"
+          style="width: 100%"
         >
           <el-option v-for="file in importFiles" :key="file.id" :label="formatImportFileLabel(file)" :value="file.id" />
         </el-select>
-        <el-select v-model="filters.review_status" clearable placeholder="状态">
+        <el-select v-model="filters.review_status" clearable placeholder="状态" style="width: 100%">
           <el-option label="待校正" value="needs_review" />
           <el-option label="已确认" value="confirmed" />
         </el-select>
-        <el-input v-model="filters.search" :prefix-icon="Search" clearable placeholder="搜索商家 / 商品 / 备注" />
+        <el-input v-model="filters.search" :prefix-icon="Search" clearable placeholder="搜索商家 / 商品 / 备注" style="width: 100%" />
         <el-button type="primary" @click="applyFilters">查询</el-button>
         <el-button @click="resetFilters">重置</el-button>
       </div>
     </section>
 
     <section class="panel card">
-      <el-table :data="transactions" v-loading="loading" empty-text="暂无交易数据">
-        <el-table-column label="日期" min-width="170">
+      <el-table :data="transactions" v-loading="loading" empty-text="暂无交易数据" height="calc(100vh - 320px)">
+        <el-table-column label="日期" min-width="130" align="center" header-align="center">
           <template #default="{ row }">{{ formatDate(row.occurred_at) }}</template>
         </el-table-column>
-        <el-table-column prop="platform" label="来源" width="110" />
-        <el-table-column prop="merchant" label="商家" min-width="160" show-overflow-tooltip />
-        <el-table-column label="分类" width="140">
+        <el-table-column prop="platform" label="来源" min-width="70" align="center" header-align="center" />
+        <el-table-column prop="merchant" label="商家" min-width="80" align="center" header-align="center" show-overflow-tooltip />
+        <el-table-column label="分类" min-width="75" align="center" header-align="center">
           <template #default="{ row }">
             <el-tag :type="row.needs_review ? 'warning' : 'success'" effect="light">{{ categoryName(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="金额" width="130" align="right">
+        <el-table-column label="金额" min-width="90" align="center" header-align="center">
           <template #default="{ row }">
             <span class="amount" :class="isIncome(row) ? 'positive' : 'negative'">
               {{ isIncome(row) ? '+' : '-' }}{{ money(row.amount) }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="110">
+        <el-table-column label="状态" min-width="72" align="center" header-align="center">
           <template #default="{ row }">
             <el-tag :type="statusType(row)" class="status-tag">
               {{ statusText(row) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="分类来源" width="130">
+        <el-table-column label="分类来源" min-width="78" align="center" header-align="center">
           <template #default="{ row }">{{ providerText(row.auto_provider) }}</template>
         </el-table-column>
-        <el-table-column prop="auto_reason" label="分类理由" min-width="220" show-overflow-tooltip />
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column prop="auto_reason" label="分类理由" min-width="120" align="center" header-align="center" show-overflow-tooltip />
+        <el-table-column label="操作" width="80" align="center" fixed="right" header-align="center">
           <template #default="{ row }">
             <el-button :icon="View" circle text @click="openDetail(row)" />
             <el-button :icon="EditPen" circle text type="primary" @click="goReview(row)" />
@@ -313,7 +320,7 @@ onMounted(async () => {
 
 <style scoped>
 .filter-grid {
-  grid-template-columns: minmax(260px, 1.3fr) minmax(130px, 0.7fr) minmax(150px, 0.8fr) minmax(220px, 1.1fr) minmax(110px, 0.6fr) minmax(220px, 1fr) 88px 78px;
+  grid-template-columns: repeat(7, minmax(100px, 1fr)) auto auto;
 }
 
 .pagination-row {
