@@ -110,3 +110,68 @@ def test_requeue_sets_batch_timestamp(monkeypatch) -> None:
     assert refreshed.requeue_batch_ts is not None
     db2.close()
     db.close()
+
+
+def test_requeue_with_progress_yields_events(monkeypatch) -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    db = Session(engine)
+    user = User(username="prog_user", email="prog@example.com", hashed_password="hashed", is_admin=True)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    for i in range(3):
+        db.add(_transaction(user.id, f"progress-{i}", RETRY_FAILED_PROVIDER, retry_count=5))
+    db.commit()
+
+    monkeypatch.setattr(retry_queue, "SessionLocal", lambda: Session(engine))
+
+    events = list(retry_queue.requeue_with_progress(user_id=user.id))
+    assert len(events) == 3
+    assert events[0] == (1, 3)
+    assert events[-1] == (3, 3)
+    db.close()
+
+
+def test_retry_status_includes_batch_progress(monkeypatch) -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    db = Session(engine)
+    user = User(username="batch_user", email="batch@example.com", hashed_password="hashed", is_admin=True)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    batch_ts = datetime(2024, 6, 1, 12, 0, 0)
+    # Completed (was retried successfully)
+    txn1 = _transaction(user.id, "batch-done", "openai_compatible_api", retry_count=2)
+    txn1.requeue_batch_ts = batch_ts
+    # Still queued
+    txn2 = _transaction(user.id, "batch-queued", RETRY_QUEUE_PROVIDER, retry_count=1)
+    txn2.requeue_batch_ts = batch_ts
+    # Failed permanently
+    txn3 = _transaction(user.id, "batch-failed", RETRY_FAILED_PROVIDER, retry_count=10)
+    txn3.requeue_batch_ts = batch_ts
+    db.add_all([txn1, txn2, txn3])
+    db.commit()
+
+    monkeypatch.setattr(retry_queue, "SessionLocal", lambda: Session(engine))
+    status = retry_queue.get_retry_queue_status(user_id=user.id)
+
+    assert status["batch_total"] == 3
+    assert status["batch_completed"] == 1
+    assert status["batch_failed"] == 1
+    assert status["batch_pending"] == 1
+    assert status["batch_ts"] is not None
+    db.close()
