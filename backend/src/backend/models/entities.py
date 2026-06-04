@@ -118,6 +118,7 @@ class Transaction(TimestampMixin, Base):
     api_retry_count: Mapped[int] = mapped_column(Integer, default=0)
     api_retry_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
     api_retry_last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requeue_batch_ts: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class ClassificationResult(Base):
@@ -173,3 +174,28 @@ class GeneratedReport(Base):
     title: Mapped[str] = mapped_column(String(255))
     file_path: Mapped[str] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Organization(TimestampMixin, Base):
+    __tablename__ = "organizations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    plan: Mapped[str | None] = mapped_column(String(64), default="free", nullable=True)
+    subscription_status: Mapped[str | None] = mapped_column(String(32), default="active", nullable=True)
+
+    created_by: Mapped["User"] = relationship(foreign_keys=[created_by_user_id])
+
+
+class OrganizationMember(TimestampMixin, Base):
+    __tablename__ = "organization_members"
+    __table_args__ = (UniqueConstraint("organization_id", "user_id", name="uq_org_member"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    role: Mapped[str] = mapped_column(String(16), default="member")
+
+    organization: Mapped["Organization"] = relationship()
+    user: Mapped["User"] = relationship()

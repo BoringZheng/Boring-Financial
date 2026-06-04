@@ -163,7 +163,7 @@ def test_report_builder_filters_by_uploaded_files(monkeypatch) -> None:
     try:
         report = report_builder.build(
             db,
-            user.id,
+            [user.id],
             report_job,
             title="筛选报表",
             uploaded_file_ids=[file_a.id],

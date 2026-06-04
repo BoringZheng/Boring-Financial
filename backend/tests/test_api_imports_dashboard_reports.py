@@ -105,13 +105,13 @@ def test_create_report_route_uses_builder_and_returns_report(
         def build(
             self,
             db: Session,
-            user_id: int,
+            user_ids: list[int],
             report_job: ReportJob,
             title: str | None = None,
             uploaded_file_ids: list[int] | None = None,
         ) -> GeneratedReport:
             report = GeneratedReport(
-                user_id=user_id,
+                user_id=user_ids[0],
                 job_id=report_job.id,
                 title=title or "账单分析报告",
                 file_path="/tmp/report.pdf",

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -16,20 +16,27 @@ report_builder = ReportBuilder()
 @router.post("", response_model=ReportRead)
 def create_report(
     payload: ReportCreateRequest,
+    organization_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> ReportRead:
-    job = ReportJob(user_id=current_user.id, status="processing", date_from=payload.date_from, date_to=payload.date_to)
+    if organization_id is not None:
+        from backend.services.organizations import get_member_user_ids, verify_org_membership
+        try:
+            verify_org_membership(db, organization_id, current_user.id)
+        except ValueError:
+            raise HTTPException(status_code=403, detail="not a member of this organization")
+        user_ids = get_member_user_ids(db, organization_id)
+    else:
+        user_ids = [current_user.id]
+
+    job = ReportJob(user_id=current_user.id, status="processing",
+                    date_from=payload.date_from, date_to=payload.date_to)
     db.add(job)
     db.commit()
     db.refresh(job)
-    report = report_builder.build(
-        db,
-        current_user.id,
-        job,
-        payload.title,
-        uploaded_file_ids=payload.uploaded_file_ids,
-    )
+    report = report_builder.build(db, user_ids, job, payload.title,
+                                  uploaded_file_ids=payload.uploaded_file_ids)
     job.status = "done"
     db.commit()
     return ReportRead.model_validate(report)

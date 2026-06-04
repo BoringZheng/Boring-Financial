@@ -147,11 +147,11 @@ class ReportBuilder:
     def _build_context(
         self,
         db: Session,
-        user_id: int,
+        user_ids: list[int],
         report_job: ReportJob,
         uploaded_file_ids: list[int] | None,
     ) -> dict:
-        query = select(Transaction).where(Transaction.user_id == user_id)
+        query = select(Transaction).where(Transaction.user_id.in_(user_ids))
         if report_job.date_from:
             query = query.where(Transaction.occurred_at >= report_job.date_from)
         if report_job.date_to:
@@ -179,7 +179,7 @@ class ReportBuilder:
             db.scalars(
                 select(UploadedFile).where(
                     UploadedFile.batch_id.in_(
-                        select(Transaction.batch_id).where(Transaction.user_id == user_id)
+                        select(Transaction.batch_id).where(Transaction.user_id.in_(user_ids))
                     ),
                     UploadedFile.id.in_(uploaded_file_ids),
                 )
@@ -222,14 +222,14 @@ class ReportBuilder:
     def build(
         self,
         db: Session,
-        user_id: int,
+        user_ids: list[int],
         report_job: ReportJob,
         title: str | None = None,
         uploaded_file_ids: list[int] | None = None,
     ) -> GeneratedReport:
-        context = self._build_context(db, user_id, report_job, uploaded_file_ids)
+        context = self._build_context(db, user_ids, report_job, uploaded_file_ids)
 
-        file_name = f"report-{user_id}-{report_job.id}.pdf"
+        file_name = f"report-{user_ids[0]}-{report_job.id}.pdf"
         file_path = settings.reports_dir / file_name
         pdf = FPDF()
         self._configure_pdf_font(pdf)
@@ -310,7 +310,7 @@ class ReportBuilder:
 
         pdf.output(str(file_path))
 
-        report = GeneratedReport(user_id=user_id, job_id=report_job.id, title=title or "财务报告", file_path=str(file_path))
+        report = GeneratedReport(user_id=user_ids[0], job_id=report_job.id, title=title or "财务报告", file_path=str(file_path))
         db.add(report)
         db.commit()
         db.refresh(report)

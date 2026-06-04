@@ -328,10 +328,10 @@ def _cosine_similarity(v1: list[float], v2: list[float]) -> float:
 # core personality computation
 # ---------------------------------------------------------------------------
 
-def compute_personality_profile(db: Session, user_id: int) -> dict:
-    """Compute the 4-dimension personality profile from all user transactions."""
+def compute_personality_profile(db: Session, user_ids: list[int]) -> dict:
+    """Compute the 4-dimension personality profile from all transactions of given users."""
     transactions = db.scalars(
-        select(Transaction).where(Transaction.user_id == user_id)
+        select(Transaction).where(Transaction.user_id.in_(user_ids))
     ).all()
 
     if not transactions:
@@ -655,10 +655,10 @@ def _build_dimension_dict(dimension: str, value: float) -> dict:
 # financial health
 # ---------------------------------------------------------------------------
 
-def compute_financial_health(db: Session, user_id: int) -> dict:
-    """Compute 5-dimension financial health score."""
+def compute_financial_health(db: Session, user_ids: list[int]) -> dict:
+    """Compute 5-dimension financial health score for given users."""
     transactions = db.scalars(
-        select(Transaction).where(Transaction.user_id == user_id)
+        select(Transaction).where(Transaction.user_id.in_(user_ids))
     ).all()
 
     if not transactions:

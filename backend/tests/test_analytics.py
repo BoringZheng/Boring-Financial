@@ -119,7 +119,7 @@ def test_dashboard_summary_supports_date_and_category_filters() -> None:
 
     filtered = dashboard_summary(
         db,
-        user.id,
+        [user.id],
         date_from=datetime(2026, 3, 2, 0, 0, 0),
         date_to=datetime(2026, 3, 2, 23, 59, 59),
         category_id=transport.id,

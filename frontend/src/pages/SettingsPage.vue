@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import { useRetryProgress } from '../composables/useRetryProgress'
 
 const settingsForm = reactive({
   provider: 'composite',
@@ -13,7 +14,7 @@ const settingsForm = reactive({
 
 const thresholdText = computed(() => `${Math.round(settingsForm.lowConfidenceThreshold * 100)}%`)
 const auth = useAuthStore()
-const retryingAll = ref(false)
+const { requeueProgress, requeueRunning, requeuePercent, startRequeue } = useRetryProgress()
 const retryStatusLoading = ref(false)
 const retryStatus = ref<RetryQueueStatus | null>(null)
 let retryStatusTimer: number | undefined
@@ -30,7 +31,23 @@ type RetryQueueStatus = {
   newest_activity_at: string | null
   providers: Array<{ provider: string; queued: number; failed: number }>
   retry_counts: Array<{ retry_count: number; queued: number }>
+  batch_total: number
+  batch_completed: number
+  batch_failed: number
+  batch_pending: number
+  batch_ts: string | null
 }
+
+const workerPercent = computed(() => {
+  if (!retryStatus.value || retryStatus.value.batch_total === 0) return 0
+  return Math.round(
+    ((retryStatus.value.batch_completed + retryStatus.value.batch_failed) / retryStatus.value.batch_total) * 100
+  )
+})
+
+const workerActive = computed(() => {
+  return retryStatus.value != null && retryStatus.value.batch_pending > 0
+})
 
 function formatStatusTime(value: string | null) {
   if (!value) return '-'
@@ -50,17 +67,9 @@ async function loadRetryStatus(silent = false) {
   }
 }
 
-async function retryAllTimeouts() {
-  retryingAll.value = true
-  try {
-    const { data } = await api.post<{ queued: number }>('/classification/retry-all', {})
-    ElMessage.success(`已放回重试池 ${data.queued} 笔`)
-    await loadRetryStatus(true)
-  } catch {
-    ElMessage.error('重试池操作失败，请确认当前账号有管理员权限')
-  } finally {
-    retryingAll.value = false
-  }
+async function handleRetryAll() {
+  await startRequeue()
+  await loadRetryStatus(true)
 }
 
 function startRetryStatusPolling() {
@@ -170,7 +179,31 @@ onUnmounted(() => {
               {{ item.provider }}：{{ item.queued }} 等待 / {{ item.failed }} 失败
             </span>
           </div>
-          <el-button type="primary" :loading="retryingAll" @click="retryAllTimeouts">一键重试历史超时</el-button>
+          <!-- Requeue action + progress -->
+          <div class="retry-action-area">
+            <el-button type="primary" :loading="requeueRunning" :disabled="requeueRunning" @click="handleRetryAll">
+              一键重试历史超时
+            </el-button>
+            <div v-if="requeueRunning || (requeueProgress && !requeueProgress.done)" class="progress-section">
+              <span class="progress-label">放回进度：{{ requeueProgress?.current ?? 0 }} / {{ requeueProgress?.total ?? 0 }}</span>
+              <el-progress :percentage="requeuePercent" :stroke-width="14" :show-text="false" status="success" />
+            </div>
+          </div>
+
+          <!-- Worker processing progress -->
+          <div v-if="retryStatus && retryStatus.batch_total > 0" class="worker-progress-section">
+            <div class="progress-header">
+              <strong>Worker 处理进度</strong>
+              <span class="progress-label">
+                {{ retryStatus.batch_completed }} 成功 / {{ retryStatus.batch_failed }} 失败 / {{ retryStatus.batch_pending }} 等待
+              </span>
+            </div>
+            <el-progress
+              :percentage="workerPercent"
+              :stroke-width="14"
+              :color="workerActive ? '#409EFF' : '#67C23A'"
+            />
+          </div>
         </div>
         <div class="mode-list">
           <div>
@@ -286,6 +319,29 @@ onUnmounted(() => {
   color: var(--color-muted);
   line-height: 1.6;
   font-size: 13px;
+}
+
+.retry-action-area {
+  display: grid;
+  gap: 10px;
+}
+
+.progress-section,
+.worker-progress-section {
+  display: grid;
+  gap: 6px;
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.progress-label {
+  font-size: 12px;
+  color: var(--color-muted);
 }
 
 @media (max-width: 960px) {
