@@ -118,6 +118,7 @@ class Transaction(TimestampMixin, Base):
     api_retry_count: Mapped[int] = mapped_column(Integer, default=0)
     api_retry_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
     api_retry_last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requeue_batch_ts: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class ClassificationResult(Base):

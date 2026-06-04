@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Callable
+from datetime import datetime as dt_datetime, timezone
+from typing import Callable, Generator
 
 from sqlalchemy import func, select
 
@@ -144,18 +145,54 @@ def requeue_all_external_api_failures(
             return 0
 
         total = len(txns)
+        batch_ts = dt_datetime.now(timezone.utc)
         for i, txn in enumerate(txns):
             txn.auto_provider = "retry_queue"
             txn.needs_review = False
             txn.api_retry_count = 0
             txn.api_retry_provider = txn.api_retry_provider or DEFAULT_EXTERNAL_PROVIDER
             txn.api_retry_last_error = None
+            txn.requeue_batch_ts = batch_ts
             if on_progress is not None:
                 on_progress(i + 1, total)
 
         db.commit()
         logger.info("Requeued %d transactions into retry queue", total)
         return total
+    finally:
+        db.close()
+
+
+def requeue_with_progress(user_id: int | None = None) -> Generator[tuple[int, int], None, None]:
+    """Yield (current, total) as each transaction is requeued."""
+    db = SessionLocal()
+    try:
+        query = select(Transaction).where(
+            (Transaction.auto_provider == RETRY_QUEUE_PROVIDER)
+            | (Transaction.auto_provider == RETRY_FAILED_PROVIDER)
+            | (Transaction.auto_reason.contains("external api"))
+        )
+        if user_id is not None:
+            query = query.where(Transaction.user_id == user_id)
+        txns = db.scalars(query).all()
+
+        if not txns:
+            return
+
+        total = len(txns)
+        batch_ts = dt_datetime.now(timezone.utc)
+        for i, txn in enumerate(txns):
+            txn.auto_provider = "retry_queue"
+            txn.needs_review = False
+            txn.api_retry_count = 0
+            txn.api_retry_provider = txn.api_retry_provider or DEFAULT_EXTERNAL_PROVIDER
+            txn.api_retry_last_error = None
+            txn.requeue_batch_ts = batch_ts
+            db.flush()
+            yield (i + 1, total)
+
+        db.commit()
+        logger.info("Requeued %d transactions into retry queue (streamed)", total)
     finally:
         db.close()
 
@@ -225,6 +262,36 @@ def get_retry_queue_status(user_id: int | None = None) -> dict:
         )
         newest_activity = db.scalar(select(func.max(Transaction.updated_at)).where(*base_filters))
 
+        # Worker progress for the latest requeue batch
+        latest_batch_ts = db.scalar(
+            select(func.max(Transaction.requeue_batch_ts)).where(
+                Transaction.requeue_batch_ts.isnot(None),
+                *(base_filters[1:] if len(base_filters) > 1 else []),
+            )
+        )
+        batch_total = 0
+        batch_completed = 0
+        batch_failed = 0
+        batch_pending = 0
+        if latest_batch_ts is not None:
+            batch_filter = [Transaction.requeue_batch_ts == latest_batch_ts]
+            if len(base_filters) > 1:
+                batch_filter.extend(base_filters[1:])
+            batch_txns = db.execute(
+                select(Transaction.auto_provider, func.count())
+                .where(*batch_filter)
+                .group_by(Transaction.auto_provider)
+            ).all()
+            for provider_status, count in batch_txns:
+                count = int(count)
+                batch_total += count
+                if provider_status == RETRY_QUEUE_PROVIDER:
+                    batch_pending += count
+                elif provider_status == RETRY_FAILED_PROVIDER:
+                    batch_failed += count
+                else:
+                    batch_completed += count
+
         return {
             "queued": queued,
             "failed": failed,
@@ -240,6 +307,11 @@ def get_retry_queue_status(user_id: int | None = None) -> dict:
                 {"retry_count": int(retry_count or 0), "queued": int(count)}
                 for retry_count, count in retry_count_rows
             ],
+            "batch_total": batch_total,
+            "batch_completed": batch_completed,
+            "batch_failed": batch_failed,
+            "batch_pending": batch_pending,
+            "batch_ts": _isoformat(latest_batch_ts),
         }
     finally:
         db.close()

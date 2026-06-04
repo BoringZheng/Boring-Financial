@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,7 +10,7 @@ from backend.api.dependencies import get_current_user, get_db_session, require_a
 from backend.models import Transaction, User
 from backend.schemas.transactions import ReclassifyRequest
 from backend.services.classifiers import classify_transaction
-from backend.services.retry_queue import get_retry_queue_status, requeue_all_external_api_failures
+from backend.services.retry_queue import get_retry_queue_status, requeue_all_external_api_failures, requeue_with_progress
 
 router = APIRouter()
 
@@ -110,3 +111,17 @@ def org_reclassify(
             failed += 1
             failures.append({"transaction_id": transaction.id, "error": str(exc)})
     return {"processed": processed, "failed": failed, "failures": failures}
+
+@router.post("/retry-all-stream")
+def retry_all_stream(
+    payload: RetryAllRequest,
+    _: User = Depends(require_admin),
+) -> StreamingResponse:
+    def event_generator():
+        last = 0
+        for current, total in requeue_with_progress(user_id=payload.user_id):
+            yield f"data: {{\"current\": {current}, \"total\": {total}}}\n\n"
+            last = current
+        yield f"data: {{\"done\": true, \"queued\": {last}}}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
