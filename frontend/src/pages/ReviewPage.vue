@@ -300,10 +300,12 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
   gap: 16px;
+  height: calc(100vh - 160px);
 }
 
 .review-list {
-  min-height: 620px;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .review-items {
@@ -348,10 +350,11 @@ onMounted(async () => {
 }
 
 .review-detail {
-  min-height: 620px;
   display: grid;
   align-content: start;
   gap: 18px;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .detail-head {

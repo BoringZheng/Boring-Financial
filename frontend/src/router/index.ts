@@ -9,7 +9,6 @@ import TransactionsPage from '../pages/TransactionsPage.vue'
 import ReviewPage from '../pages/ReviewPage.vue'
 import CategoriesPage from '../pages/CategoriesPage.vue'
 import PersonalityPage from '../pages/PersonalityPage.vue'
-import OrganizationPage from '../pages/OrganizationPage.vue'
 import ReportsPage from '../pages/ReportsPage.vue'
 import SettingsPage from '../pages/SettingsPage.vue'
 
@@ -30,7 +29,6 @@ const router = createRouter({
         { path: 'categories', component: CategoriesPage },
         { path: 'reports', component: ReportsPage },
         { path: 'personality', component: PersonalityPage },
-        { path: 'organization', component: OrganizationPage },
         { path: 'settings', component: SettingsPage },
       ],
     },

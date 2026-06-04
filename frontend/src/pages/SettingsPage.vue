@@ -226,22 +226,26 @@ onUnmounted(() => {
 
 <style scoped>
 .settings-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  display: flex;
   gap: 16px;
+  align-items: flex-start;
 }
 
 .settings-main {
+  flex: 1;
   max-width: 820px;
+  min-width: 0;
+}
+
+.settings-side {
+  width: 340px;
+  flex-shrink: 0;
 }
 
 .settings-main :deep(.el-segmented) {
   max-width: 100%;
 }
 
-.settings-side {
-  align-self: start;
-}
 
 .mode-list {
   display: grid;
