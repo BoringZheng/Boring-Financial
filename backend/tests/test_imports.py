@@ -101,7 +101,11 @@ def test_process_import_batch_marks_partial_failed_when_classification_fails(mon
     ]
 
     monkeypatch.setattr(imports_service.parser_registry, "parse_file", lambda _: parsed_transactions)
-    monkeypatch.setattr(imports_service, "classify_transaction_in_session", lambda *args, **kwargs: "model unavailable")
+
+    def _failing_classify(*args, **kwargs):
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(imports_service, "classify_transaction", _failing_classify)
 
     result = imports_service.process_import_batch(db, batch.id)
 

@@ -96,10 +96,18 @@ class StatementReader:
                 except Exception as exc:
                     last_error = exc
                     continue
+        # If we successfully read the file but it didn't look like a statement,
+        # return the best-effort DataFrame so downstream can raise "Unrecognized statement format".
+        # Only raise encoding errors when the file is truly unreadable.
+        try:
+            fallback_df = pd.read_csv(path)
+            return fallback_df
+        except Exception:
+            pass
         if last_error is not None:
             supported = ", ".join(CSV_ENCODINGS)
             raise ValueError(f"Unable to read CSV with supported encodings ({supported}): {last_error}") from last_error
-        return pd.read_csv(path)
+        raise ValueError(f"Unable to read CSV: {path}")
 
     def _looks_like_statement(self, df: pd.DataFrame) -> bool:
         columns = [str(column) for column in df.columns]
