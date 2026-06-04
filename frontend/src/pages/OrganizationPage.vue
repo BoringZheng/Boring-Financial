@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import * as echarts from 'echarts'
 import {
   UserFilled,
   Plus,
@@ -35,6 +36,8 @@ const newOrgName = ref('')
 const showAddMemberDialog = ref(false)
 const newMemberUsername = ref('')
 const editingPlan = ref(false)
+const personalityRadarRef = ref<HTMLDivElement | null>(null)
+let personalityRadarChart: echarts.ECharts | null = null
 
 const selectedOrg = computed(() =>
   organizations.value.find((o) => o.id === selectedOrgId.value) ?? null
@@ -167,6 +170,57 @@ function formatMoney(val: string | number): string {
 function roleLabel(role: string): string {
   return role === 'owner' ? '拥有者' : role === 'admin' ? '管理员' : '成员'
 }
+
+function renderPersonalityRadar() {
+  if (!personalityRadarChart || !personalityData.value?.personality) return
+  const dims = personalityData.value.personality.dimensions
+  personalityRadarChart.setOption({
+    color: ['#00A884'],
+    tooltip: {},
+    legend: { show: false },
+    radar: {
+      center: ['50%', '50%'],
+      radius: '75%',
+      indicator: dims.map((d: any) => ({ name: d.label, max: 100 })),
+      axisName: { color: '#334155', fontSize: 13 },
+    },
+    series: [
+      {
+        type: 'radar',
+        data: [
+          {
+            value: dims.map((d: any) => d.value),
+            name: '家庭人格',
+            areaStyle: { color: 'rgba(0, 168, 132, 0.2)' },
+            lineStyle: { color: '#00A884', width: 2 },
+            itemStyle: { color: '#00A884' },
+          },
+        ],
+      },
+    ],
+  })
+}
+
+function resizeRadar() {
+  personalityRadarChart?.resize()
+}
+
+watch(personalityData, async () => {
+  await nextTick()
+  if (personalityRadarRef.value && !personalityRadarChart) {
+    personalityRadarChart = echarts.init(personalityRadarRef.value)
+  }
+  renderPersonalityRadar()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', resizeRadar)
+  personalityRadarChart?.dispose()
+})
+
+onMounted(() => {
+  window.addEventListener('resize', resizeRadar)
+})
 </script>
 
 <template>
@@ -275,13 +329,7 @@ function roleLabel(role: string): string {
               <span class="personality-name">{{ personalityData.personality.name }}</span>
               <span class="personality-tagline">{{ personalityData.personality.tagline }}</span>
             </div>
-            <div class="personality-dims">
-              <div v-for="dim in personalityData.personality.dimensions" :key="dim.name" class="dim-row">
-                <span class="dim-label">{{ dim.label }}</span>
-                <el-progress :percentage="dim.value" :stroke-width="8" :show-text="false" color="#00A884" />
-                <span class="dim-value">{{ dim.value.toFixed(0) }}</span>
-              </div>
-            </div>
+            <div ref="personalityRadarRef" class="radar-chart"></div>
             <div v-if="personalityData.financial_health" class="health-tag-row">
               <el-tag size="large"
                 :type="personalityData.financial_health.grade === 'A' || personalityData.financial_health.grade === 'S' ? 'success' : 'warning'">
@@ -410,29 +458,9 @@ function roleLabel(role: string): string {
   font-size: 14px;
 }
 
-.personality-dims {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.dim-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.dim-label {
-  width: 100px;
-  font-size: 13px;
-  color: var(--color-muted);
-}
-
-.dim-value {
-  width: 36px;
-  text-align: right;
-  font-size: 13px;
-  font-weight: 600;
+.radar-chart {
+  width: 100%;
+  height: 320px;
 }
 
 .health-tag-row {
