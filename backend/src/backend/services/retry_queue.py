@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from datetime import datetime as dt_datetime, timezone
 from typing import Callable
 
 from sqlalchemy import func, select
@@ -144,12 +145,14 @@ def requeue_all_external_api_failures(
             return 0
 
         total = len(txns)
+        batch_ts = dt_datetime.now(timezone.utc)
         for i, txn in enumerate(txns):
             txn.auto_provider = "retry_queue"
             txn.needs_review = False
             txn.api_retry_count = 0
             txn.api_retry_provider = txn.api_retry_provider or DEFAULT_EXTERNAL_PROVIDER
             txn.api_retry_last_error = None
+            txn.requeue_batch_ts = batch_ts
             if on_progress is not None:
                 on_progress(i + 1, total)
 

@@ -80,3 +80,33 @@ def test_retry_queue_status_is_aggregate_and_user_filterable(monkeypatch) -> Non
     assert status["retry_counts"] == [{"retry_count": 0, "queued": 1}, {"retry_count": 2, "queued": 1}]
     assert "private merchant" not in repr(status)
     assert "secret provider error" not in repr(status)
+
+
+def test_requeue_sets_batch_timestamp(monkeypatch) -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    db = Session(engine)
+    user = User(username="admin2", email="admin2@example.com", hashed_password="hashed", is_admin=True)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    txn = _transaction(user.id, "batch-ts-test", RETRY_FAILED_PROVIDER, retry_count=5)
+    db.add(txn)
+    db.commit()
+    db.refresh(txn)
+    assert txn.requeue_batch_ts is None
+
+    monkeypatch.setattr(retry_queue, "SessionLocal", lambda: Session(engine))
+    retry_queue.requeue_all_external_api_failures(user_id=user.id)
+
+    db2 = Session(engine)
+    refreshed = db2.get(Transaction, txn.id)
+    assert refreshed.requeue_batch_ts is not None
+    db2.close()
+    db.close()
