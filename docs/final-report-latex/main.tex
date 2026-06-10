@@ -1,0 +1,198 @@
+\documentclass[UTF8,zihao=-4,openany,fontset=none]{ctexrep}
+
+\usepackage[a4paper,top=2.75cm,bottom=2.55cm,left=2.75cm,right=2.55cm,headsep=0.65cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage[table]{xcolor}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{etoolbox}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
+\graphicspath{{figures/}}
+\setmainfont{Times New Roman}
+\setsansfont{Times New Roman}
+\setCJKmainfont[AutoFakeBold=2.5]{Songti SC}
+\setCJKsansfont[AutoFakeBold=2.5]{Songti SC}
+\setCJKmonofont[AutoFakeBold=2.0]{Songti SC}
+
+\definecolor{bfPrimary}{HTML}{202020}
+\definecolor{bfInk}{HTML}{202020}
+\definecolor{bfMuted}{HTML}{666666}
+\definecolor{bfRule}{HTML}{D6D6D6}
+\definecolor{bfPanel}{HTML}{F6F6F6}
+\definecolor{bfCode}{HTML}{F7F7F7}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=black,
+  pdfauthor={Boring Financial Team},
+  pdftitle={Boring Financial 智能账单分类系统项目报告}
+}
+
+\linespread{1.18}
+\setlength{\parskip}{0.2em}
+\setlength{\tabcolsep}{7pt}
+\renewcommand{\arraystretch}{1.32}
+\arrayrulecolor{bfRule}
+\urlstyle{same}
+\sloppy
+
+\ctexset{
+  chapter = {
+    format = \raggedright\bfseries\zihao{2}\color{bfInk},
+    nameformat = \bfseries\zihao{4}\color{bfMuted},
+    numberformat = \bfseries\zihao{4}\color{bfMuted},
+    titleformat = \bfseries\zihao{2}\color{bfInk},
+    aftername = \quad,
+    beforeskip = 0.1em,
+    afterskip = 1.45em
+  },
+  section = {
+    format = \raggedright\bfseries\zihao{3}\color{bfInk},
+    beforeskip = 1.25em,
+    afterskip = 0.65em
+  },
+  subsection = {
+    format = \raggedright\bfseries\zihao{4}\color{bfInk},
+    beforeskip = 1em,
+    afterskip = 0.45em
+  }
+}
+
+\newcommand{\headingneedspace}[1]{%
+  \par
+  \begingroup
+    \dimen0=\pagegoal
+    \advance\dimen0 by -\pagetotal
+    \dimen2=#1\baselineskip
+    \ifdim\dimen0<\dimen2
+      \newpage
+    \fi
+  \endgroup
+}
+\pretocmd{\section}{\headingneedspace{10}}{}{}
+\pretocmd{\subsection}{\headingneedspace{7}}{}{}
+
+\captionsetup{
+  font=small,
+  labelfont={bf,color=bfInk},
+  textfont={color=bfInk},
+  labelsep=quad,
+  skip=8pt
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{bfMuted}\projectname}
+\fancyhead[R]{\small\color{bfMuted}\leftmark}
+\fancyfoot[C]{\small\color{bfMuted}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{bfRule}\leaders\hrule height \headrulewidth\hfill}}
+\setlength{\headheight}{24pt}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[C]{\small\color{bfMuted}\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  columns=fullflexible,
+  frame=single,
+  framesep=6pt,
+  framerule=0.4pt,
+  rulecolor=\color{bfRule},
+  backgroundcolor=\color{bfCode}
+}
+
+\newcommand{\projectname}{Boring Financial 智能账单分类系统}
+\newcommand{\uiscreenshot}[1]{%
+  \includegraphics[
+    width=0.88\textwidth,
+    height=0.24\textheight,
+    keepaspectratio
+  ]{#1}%
+}
+\newcommand{\placeholderfigure}[2]{%
+  \begin{figure}[H]
+    \centering
+    \fcolorbox{bfRule}{bfPanel}{%
+      \begin{minipage}[c][4.2cm][c]{0.84\textwidth}
+        \centering\color{bfMuted}#1
+      \end{minipage}%
+    }
+    \caption{#2}
+  \end{figure}
+}
+
+\tikzset{
+  umlclass/.style={
+    draw=bfRule,
+    fill=bfPanel,
+    rounded corners=1pt,
+    align=left,
+    text width=3.7cm,
+    inner sep=4pt,
+    font=\ttfamily\scriptsize
+  },
+  umlrel/.style={-{Latex[length=2mm]}, draw=bfMuted, line width=0.45pt},
+  umlinherit/.style={-{Triangle[length=2mm,width=2mm]}, draw=bfMuted, line width=0.45pt}
+}
+
+\newcommand{\classbox}[4][]{%
+  \node[umlclass,#1] (#2) {%
+    \textbf{#3}\\[-0.2em]
+    \rule{\linewidth}{0.2pt}\\[-0.15em]
+    #4%
+  };
+}
+
+\begin{document}
+
+\newgeometry{top=2.1cm,bottom=2.1cm,left=2.35cm,right=2.35cm}
+\begin{titlepage}
+  \thispagestyle{empty}
+  \centering
+  \vspace*{3.2cm}
+  {\zihao{1}\bfseries \projectname\par}
+  \vspace{2.2cm}
+  {\zihao{4}
+  \begin{tabular}{rl}
+    项目成员：& 郑博文、林子尧、单彬、沈柔希 \\
+    \addlinespace[0.45cm]
+    项目周期：& 2026 年 3 月 -- 2026 年 6 月
+  \end{tabular}
+  }
+\end{titlepage}
+\restoregeometry
+
+\pagenumbering{Roman}
+\tableofcontents
+\clearpage
+
+\pagenumbering{arabic}
+
+\include{chapters/00-overview}
+\include{chapters/01-feasibility-planning}
+\include{chapters/02-requirements-analysis}
+\include{chapters/03-ui-ux-design}
+\include{chapters/04-system-design}
+\include{chapters/05-program-development}
+\include{chapters/06-acceptance-release}
+\include{chapters/07-operation-maintenance}
+\include{chapters/08-summary}
+
+\end{document}

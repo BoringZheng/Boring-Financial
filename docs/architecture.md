@@ -2,7 +2,7 @@
 
 ## 1. 总体架构
 
-Boring Financial 采用前后端分离 monorepo 架构。前端负责登录、账单导入、交易筛选、分类校正、统计看板和报表展示；后端负责认证、数据隔离、账单解析、分类、聚合和 PDF 生成。
+Boring Financial 采用前后端分离 monorepo 架构。前端负责登录、账单导入、交易筛选、分类校正、统计看板、消费人格、家庭组织和报表展示；后端负责认证、数据隔离、账单解析、分类、聚合、消费人格计算、家庭成员权限和 PDF 生成。
 
 ```mermaid
 flowchart LR
@@ -39,6 +39,7 @@ flowchart LR
 - `pages/ReportsPage.vue`: 报表条件、摘要预览、PDF 生成和下载。
 - `pages/SettingsPage.vue`: provider、阈值和模型配置展示。
 - `pages/PersonalityPage.vue`: 消费人格测评、16 型人格画像、财务健康评分和自评偏差分析。
+- `pages/OrganizationPage.vue`: 家庭组织创建、成员角色管理、家庭财务概览和家庭消费人格分析。
 - `api/client.ts`: Axios 客户端，统一注入 Bearer Token。
 - `stores/auth.ts`: 登录态、token、本地存储和当前用户。
 
@@ -62,12 +63,14 @@ flowchart LR
 - `api/routes_classification.py`: 对指定交易重分类。
 - `api/routes_dashboard.py`: Dashboard 聚合数据。
 - `api/routes_reports.py`: PDF 报表生成和下载。
+- `api/routes_organizations.py`: 家庭组织 CRUD、成员列表、成员新增、角色调整和成员移除。
 - `services/imports.py`: 导入批次创建、文件保存、解析和交易落库。
 - `services/classifiers.py`: 规则、缓存、外部模型、本地模型与混合分类链路。
 - `services/analytics.py`: Dashboard 聚合。
 - `services/reports.py`: PDF 报表构建，含 Unicode 字体自动检测。
 - `api/routes_personality.py`: 消费人格画像、心理测验题目和自评对比。
 - `services/personality.py`: 四维人格计算（现时偏好/心理账户/炫耀性消费/开放性）、16 型人格分类、财务健康评分（储蓄率/收入稳定性/消费多样性/支出波动/应急能力）和测验评分与偏差分析。
+- `services/organizations.py`: 家庭组织创建、成员查询、角色校验、组织成员 user_id 聚合。
 - `services/bootstrap.py`: 启动时初始化默认分类和 `category_map.csv` 规则种子。
 
 ## 4. 核心数据流
@@ -79,13 +82,16 @@ flowchart LR
 5. Classifier 按规则、缓存、模型 provider 的顺序给出分类建议。
 6. 分类结果写入 `transactions` 和 `classification_results`。
 7. 低置信度或未命中分类的交易进入校正工作台。
-8. Dashboard 和 PDF 报表基于交易表聚合生成。
+8. Dashboard、消费人格画像和 PDF 报表基于交易表聚合生成。
+9. 用户选择家庭组织时，后端通过 OrganizationMember 校验成员身份，将组织成员的 `user_id` 列表传入 Dashboard、Personality 和 Reports 聚合逻辑。
 
 ## 5. 数据模型边界
 
 主要表：
 
 - `users`: 用户账号。
+- `organizations`: 家庭组织。
+- `organization_members`: 家庭组织成员和 owner/admin/member 角色。
 - `categories`: 系统分类和用户分类。
 - `category_rules`: 分类规则预留表。
 - `import_batches`: 导入批次。
@@ -106,6 +112,9 @@ flowchart LR
 
 ```mermaid
 erDiagram
+    users ||--o{ organizations : "created_by_user_id"
+    users ||--o{ organization_members : "user_id"
+    organizations ||--o{ organization_members : "organization_id"
     users ||--o{ categories : "user_id"
     users ||--o{ category_rules : "user_id"
     users ||--o{ import_batches : "user_id"
@@ -132,6 +141,21 @@ erDiagram
         string hashed_password
         bool is_active
         bool is_admin
+    }
+
+    organizations {
+        int id PK
+        string name
+        int created_by_user_id FK
+        string plan
+        string subscription_status
+    }
+
+    organization_members {
+        int id PK
+        int organization_id FK
+        int user_id FK
+        string role
     }
 
     categories {
