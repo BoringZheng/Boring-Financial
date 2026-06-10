@@ -1,0 +1,147 @@
+\chapter{验收与发布}
+
+\section{自动化测试}
+
+系统后端具备完整的自动化测试套件，位于 \texttt{backend/tests} 目录下，共 15 个文件（含测试辅助模块），其中 14 个为正式测试文件，覆盖安全、认证、导入、交易、分类、解析、分析、人格、组织、报表、可靠性与重试队列等核心领域。测试框架使用 pytest，可通过 \texttt{pytest} 或 \texttt{pytest --cov=backend} 运行。
+
+\begin{longtable}{p{5.5cm} p{5cm} p{3cm}}
+\caption{自动化测试覆盖范围}
+\label{tab:test-files}\\
+\toprule
+\textbf{测试文件} & \textbf{覆盖领域} & \textbf{测试数} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{c}{\small 表~\thetable\quad 自动化测试覆盖范围（续）} \\
+\toprule
+\textbf{测试文件} & \textbf{覆盖领域} & \textbf{测试数} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{3}{r}{\small 接下页} \\
+\endfoot
+\bottomrule
+\endlastfoot
+\path{test_security.py} & 密码哈希、Token 编解码 & 2 \\
+\hline
+\path{test_api_auth.py} & 注册、登录、登出 API & 3 \\
+\hline
+\path{test_api_imports_dashboard_reports.py} & 导入、Dashboard 聚合、报表 API & 4 \\
+\hline
+\path{test_api_transactions.py} & 交易查询与分类更新 API & 4 \\
+\hline
+\path{test_classifiers.py} & 规则匹配、缓存、复合分类器 & 7 \\
+\hline
+\path{test_parsers.py} & 微信/支付宝账单格式解析 & 4 \\
+\hline
+\path{test_analytics.py} & Dashboard 聚合计算 & 1 \\
+\hline
+\path{test_personality.py} & 人格维度计算、问卷对比、边界条件 & 2 \\
+\hline
+\path{test_organizations.py} & 组织创建、成员权限、家庭聚合、个人模式兼容 & 13 \\
+\hline
+\path{test_reports.py} & PDF 报表生成 & 1 \\
+\hline
+\path{test_reliability_metrics.py} & 分类可靠性指标统计 & 3 \\
+\hline
+\path{test_retry_queue.py} & 重试队列入队、处理与状态查询 & 4 \\
+\hline
+\path{test_normalizers.py} & 文本规范化与哈希稳定性 & 2 \\
+\hline
+\path{test_imports.py} & 导入服务流程 & 3 \\
+\end{longtable}
+
+\section{测试结果}
+
+全部 53 个测试用例通过，后端整体覆盖率为 74\%。各测试文件覆盖其对应服务或路由模块的核心逻辑路径。
+
+前端构建测试包含两个阶段：TypeScript 类型检查（\texttt{vue-tsc --noEmit}）与 Vite 生产构建（\texttt{vite build}）。验证时通过 \texttt{npm ci} 安装依赖后执行 \texttt{npm run build}，两个阶段均通过，无类型错误或编译错误。Vite 构建输出提示部分 chunk 大小超过 500 KB，主要来源于 Element Plus 与 ECharts 组件库，属于后续性能优化项，不影响功能完整性。
+
+\begin{table}[H]
+\centering
+\caption{测试结果汇总}
+\label{tab:test-results}
+\begin{tabular}{p{6cm} p{3cm} p{4.5cm}}
+\toprule
+\textbf{测试类型} & \textbf{结果} & \textbf{说明} \\
+\midrule
+后端 pytest 单元/集成测试 & 53/53 通过 & 覆盖 14 个测试文件 \\
+\hline
+后端代码覆盖率 & 74\% & \texttt{pytest --cov=backend} 统计 \\
+\hline
+前端 TypeScript 类型检查 & 通过 & \texttt{vue-tsc --noEmit} 无错误 \\
+\hline
+前端 Vite 生产构建 & 通过 & 静态资源构建成功 \\
+\hline
+前端 Chunk 体积优化 & 待优化 & Element Plus + ECharts 超过 500KB \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{验收测试}
+
+验收测试以手工联调方式执行，覆盖从注册到报表生成的完整用户流程，共 14 个验收步骤。
+
+\begin{longtable}{p{0.8cm} p{5cm} p{7.5cm}}
+\caption{验收测试执行清单}
+\label{tab:acceptance-tests}\\
+\toprule
+\textbf{步骤} & \textbf{操作} & \textbf{预期结果} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{c}{\small 表~\thetable\quad 验收测试执行清单（续）} \\
+\toprule
+\textbf{步骤} & \textbf{操作} & \textbf{预期结果} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{3}{r}{\small 接下页} \\
+\endfoot
+\bottomrule
+\endlastfoot
+1 & 注册新用户并登录 & 注册成功，跳转至 Dashboard \\
+\hline
+2 & 进入导入页面，上传微信或支付宝账单 & 文件上传成功，显示导入批次进度 \\
+\hline
+3 & 检查最近导入结果与批次进度 & 批次状态从 processing 变为 done，交易计数正确 \\
+\hline
+4 & 进入 Dashboard 查看概览 & 收入、支出、储蓄率、分类占比与 Top 商户正常显示 \\
+\hline
+5 & 进入交易列表，按条件筛选 & 筛选结果正确，分页可用 \\
+\hline
+6 & 打开交易详情抽屉 & 显示分类来源、置信度与分类理由 \\
+\hline
+7 & 进入校正工作台，确认一笔待校正交易 & 交易从待校正队列移除，最终分类已更新 \\
+\hline
+8 & 新增一个用户自定义分类 & 分类列表中显示新分类，校正工作台中可选 \\
+\hline
+9 & 进入报表中心，生成 PDF & 生成成功，文件可下载，内容与交易数据一致 \\
+\hline
+10 & 进入消费人格页面 & 人格画像卡片、四维雷达图、财务健康评分正常渲染 \\
+\hline
+11 & 完成人格问卷自评 & 显示主观认知与交易数据画像的偏差对比 \\
+\hline
+12 & 创建家庭组织并添加成员 & 组织创建成功，成员列表中显示被添加用户 \\
+\hline
+13 & 查看家庭组织 Dashboard & 显示家庭聚合收入、支出、交易数与家庭人格雷达图 \\
+\hline
+14 & 查看系统设置页面 & 管理员可见 retry queue 状态与操作按钮，普通用户仅可见配置展示 \\
+\end{longtable}
+
+每个验收步骤均在桌面视口（1440x900）下完成验证，确保页面无中文乱码、布局正常、交互响应正确。窄屏视口（390x844）下验证导航栏与内容区无严重重叠，表格与图表可正常展示。
+
+\section{发布状态}
+
+系统已完成部署并进入可用状态。部署架构采用 Docker Compose + Nginx 方案，各组件配置如下：
+
+\begin{itemize}
+  \item \textbf{前端静态资源}：Vue 3 应用通过 Vite 构建为静态文件，由 Nginx 直接托管提供服务。
+  \item \textbf{Nginx 反向代理}：监听 80 端口，前端路由由 Nginx 处理，\texttt{/api} 路径反向代理至后端 FastAPI 服务（\texttt{127.0.0.1:8000}）。
+  \item \textbf{FastAPI 后端}：运行在内部 8000 端口，提供 RESTful API，由 Uvicorn 启动。
+  \item \textbf{PostgreSQL}：持久化存储用户、交易、分类、组织、报表等业务数据。
+  \item \textbf{Redis}：缓存与异步任务消息队列。低配部署时可通过 \texttt{TASK\_ALWAYS\_EAGER=true} 减少 Redis 依赖。
+  \item \textbf{重试队列 Worker}：通过 FastAPI lifespan 事件启动后台线程，串行处理标记为 \texttt{retry\_queue} 状态的交易分类请求。
+\end{itemize}
+
+管理员账号通过后端 CLI 工具创建，不提供公开注册入口。生产环境配置包括环境变量注入（数据库连接、模型 API 密钥、Redis 地址等），通过 Docker Compose 的 \texttt{env\_file} 或裸机部署的环境变量文件管理。
+
+系统当前版本已交付的完整功能包括：用户认证与数据隔离、微信/支付宝账单导入与解析、大模型语义分类与人工校正、Dashboard 财务分析、消费人格画像与财务健康评分、家庭组织管理与聚合分析、PDF 报表生成与下载、多供应商分类切换与重试队列容错。系统具备生产级部署能力，后端测试覆盖率达到 74\%，前端构建通过类型检查与生产构建验证。

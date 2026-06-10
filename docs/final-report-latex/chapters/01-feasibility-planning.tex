@@ -1,0 +1,298 @@
+\chapter{可行性分析与规划}
+
+\section{开发流程与选择依据}
+
+本项目采用轻量级迭代开发流程，而非传统的瀑布模型。这一选择基于以下实际约束和工程考量：
+
+\begin{table}[H]
+\centering
+\caption{开发流程选择依据}
+\label{tab:process-reasons}
+\begin{tabular}{p{3cm}p{10.2cm}}
+\toprule
+\textbf{因素} & \textbf{说明} \\
+\midrule
+有限的项目周期 & 项目从 3 月持续至 6 月，需要在约四个月内完成从需求分析到部署交付的全部工作，要求流程具备快速反馈和持续交付能力。 \\
+\addlinespace
+需求随实现迭代演化 & 不同平台的账单格式差异、大模型分类的实际效果以及前端交互体验都需要在实际实现和联调过程中不断验证和修正，难以在初始阶段完全冻结需求。 \\
+\addlinespace
+团队可并行推进 & 前端、后端、分类模型、测试和文档等工作可按照模块边界并行开发，迭代流程天然支持这种并行协作模式。 \\
+\addlinespace
+MVP 优先策略 & 首先保证「导入 — 大模型初分 — 人工校正 — 分析 — 报表」的核心闭环可运行，后续再逐步补充增强功能。 \\
+\addlinespace
+文档持续积累 & 各阶段的过程文档在开发过程中持续积累，在最终交付阶段统一整理为完整报告，避免期末集中赶工。 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{迭代阶段与反馈闭环}
+
+系统的开发过程划分为四个阶段，阶段之间通过反馈回路进行修正：
+
+\begin{itemize}
+  \item \textbf{阶段一（3 月）：选题与需求}。确立项目目标、完成可行性研究、明确团队分工和需求范围。核心产出包括项目目标说明、可行性论证、需求列表和利益相关者分析。
+
+  \item \textbf{阶段二（4 月）：原型与架构}。完成前端页面原型、系统架构设计、组件图、部署图，以及安全性和性能的初步设计。此阶段的架构决策为后续实现提供了稳定的技术骨架。
+
+  \item \textbf{阶段三（5 月）：功能实现与联调}。完成核心功能的开发并进行前后端联调。实现范围覆盖用户认证、账单导入、AI 分类、人工校正、Dashboard、消费人格画像、家庭组织和 PDF 报表。实现过程中发现的技术约束会反向修正架构设计，联调中发现的问题会反向修正需求定义。
+
+  \item \textbf{阶段四（6 月）：测试、部署与报告}。完成自动化测试和手工验收测试，编写部署文档，整理最终报告和答辩材料。测试中发现的缺陷会触发对实现和设计的修正。
+\end{itemize}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[
+    width=0.78\textwidth,
+    height=0.66\textheight,
+    keepaspectratio
+  ]{开发流程图.png}
+  \caption{开发流程迭代图}
+  \label{fig:dev-flow}
+\end{figure}
+
+\section{可行性分析}
+
+在项目启动阶段，从五个维度对项目可行性进行了系统评估。评估结果如表~\ref{tab:feasibility} 所示。
+
+\begin{table}[H]
+\centering
+\caption{多维度可行性分析}
+\label{tab:feasibility}
+\begin{tabular}{p{2.6cm}p{2cm}p{8.6cm}}
+\toprule
+\textbf{维度} & \textbf{结论} & \textbf{依据} \\
+\midrule
+业务可行性 & 可行 & 自动记账分类误判是真实的用户痛点，大模型语义分类结合人工校正的解决方案价值明确。消费人格画像和家庭组织聚合进一步增强了产品的差异化竞争力。 \\
+\addlinespace
+技术可行性 & 可行 & 技术栈选择成熟稳定：FastAPI 提供高性能异步 API，Vue 3 + Element Plus 提供组件化的前端能力，SQLAlchemy 提供 ORM 层的数据操作抽象，Docker 提供一致化的运行环境。所有技术均有丰富的社区支持和生产实践验证。 \\
+\addlinespace
+进度可行性 & 可行 & 四个月的项目周期可以支撑四阶段的迭代开发节奏。四人团队按前端、后端、模型/测试的模块边界并行推进，核心闭环可以在两个月内完成 MVP。 \\
+\addlinespace
+资源可行性 & 可行 & 开发设备使用团队成员的本地电脑，无需额外硬件投入。Git、Docker、PostgreSQL、Redis 等工具均采用开源或免费方案。模型服务支持本地 mock 和规则兜底，可灵活控制对商用 API 的依赖。 \\
+\addlinespace
+经济可行性 & 可行 & 项目预算极低，主要成本为成员的开发时间和可选的大模型 API 调用费用（可通过规则兜底和本地模型服务进一步压缩）。 \\
+\addlinespace
+维护可行性 & 基本可行 & 采用 monorepo 代码组织、分层后端架构和前端组件化设计，配合接口文档和自动化测试，为后续维护提供了可追溯的技术基础。 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{方案选型分析}
+
+在系统核心分类策略上，项目初期评估了三种备选方案，如表~\ref{tab:alternatives} 所示。
+
+\begin{table}[H]
+\centering
+\caption{分类策略方案对比}
+\label{tab:alternatives}
+\begin{tabular}{p{3.2cm}p{3cm}p{3cm}p{4cm}}
+\toprule
+\textbf{方案} & \textbf{优点} & \textbf{缺点} & \textbf{结论} \\
+\midrule
+仅关键词规则分类 & 稳定可控，实现简单 & 难以理解「东南大学饭卡充值」等语义场景，误判后统计失真 & 不作主要方案 \\
+\addlinespace
+仅大模型自动分类 & 语义理解能力强 & 用户缺少最终控制权，模型错误直接污染统计 & 不作完整方案 \\
+\addlinespace
+大模型初分 + 人工校正 & 兼顾语义理解、可解释性和用户控制权 & 实现复杂度更高 & \textbf{最终方案} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+最终选择「大模型语义初分 + 人工校正」的前后端分离架构，同时保留规则分类作为兜底方案和重试队列作为容错机制。该方案在自动分类的语义准确性与用户对关键错误的最终控制权之间取得了平衡。
+
+\section{项目计划与进度}
+
+\subsection{工作分解结构（WBS）}
+
+项目的核心任务分解如表~\ref{tab:wbs} 所示。各任务按模块边界划分，明确负责人、前置依赖和交付物。
+
+\begingroup
+\small
+\begin{longtable}{p{1.3cm}p{4cm}p{1.8cm}p{2cm}p{4cm}}
+\caption{项目工作分解结构（WBS）}
+\label{tab:wbs}\\
+\toprule
+\textbf{编号} & \textbf{任务} & \textbf{负责人} & \textbf{前置依赖} & \textbf{交付物} \\
+\midrule
+\endfirsthead
+\multicolumn{5}{c}{\small 表~\thetable\quad 项目工作分解结构（续）} \\
+\toprule
+\textbf{编号} & \textbf{任务} & \textbf{负责人} & \textbf{前置依赖} & \textbf{交付物} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{5}{r}{\small 接下页} \\
+\endfoot
+\bottomrule
+\endlastfoot
+WBS-01 & 项目目标与范围确认 & 郑博文 & 无 & 项目立项与可行性资料 \\
+WBS-02 & 需求分析与规格说明 & 郑博文、全体 & WBS-01 & 需求规格文档 \\
+WBS-03 & 后端数据模型与接口设计 & 林子尧 & WBS-02 & ORM 模型、API 路由定义 \\
+WBS-04 & 账单解析与分类服务 & 林子尧、沈柔希 & WBS-03 & Parser、Classifier 实现 \\
+WBS-05 & 前端页面与交互实现 & 单彬 & WBS-02、WBS-03 & 全部业务前端页面 \\
+WBS-05A & 家庭组织协作能力 & 林子尧、单彬 & WBS-03、WBS-05 & Organization API 与页面 \\
+WBS-06 & 模型 provider 与重试机制 & 沈柔希 & WBS-04 & Provider 配置、重试队列 \\
+WBS-07 & 前后端联调 & 全体 & WBS-03、WBS-05 & 可运行系统 demo \\
+WBS-08 & 测试与质量保证 & 沈柔希、全体 & WBS-07 & pytest 报告、验收记录 \\
+WBS-09 & 部署与运行文档 & 沈柔希、林子尧 & WBS-07 & 部署说明文档 \\
+WBS-10 & 最终报告与答辩材料 & 郑博文、全体 & WBS-01--WBS-09 & 最终报告、答辩 PPT \\
+\end{longtable}
+\endgroup
+
+\headingneedspace{20}
+\subsection{里程碑计划}
+
+项目设置了五个关键里程碑节点，对齐各阶段的验收要求，如表~\ref{tab:milestones} 所示。
+
+\begin{table}[H]
+\centering
+\caption{项目里程碑计划}
+\label{tab:milestones}
+\begin{tabular}{p{1.6cm}p{3.5cm}p{2cm}p{6.1cm}}
+\toprule
+\textbf{里程碑} & \textbf{时间} & \textbf{阶段} & \textbf{成功标准} \\
+\midrule
+M1 & 4 月上旬 & 阶段一 & 项目名称、团队、可行性、进度和需求分析可展示 \\
+M2 & 4 月下旬 & 阶段二 & 用户体验设计、系统架构、安全和性能设计可说明 \\
+M3 & 5 月中旬 & 阶段三 & IDE 配置、组件复用、类图、顺序图和设计模式可解释 \\
+M4 & 5 月下旬 & 阶段三/四 & 测试覆盖率、单元/集成/验收测试、可靠性设计可验证 \\
+M5 & 6 月 & 阶段四 & 系统 demo、测试结果、部署资料和最终报告完整交付 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{进度甘特图}
+
+图~\ref{fig:gantt} 展示了项目从 3 月到 6 月的整体进度安排和各阶段的并行关系。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\textwidth]{简化甘特图.png}
+  \caption{项目进度甘特图}
+  \label{fig:gantt}
+\end{figure}
+
+\section{团队组织与协作}
+
+\subsection{团队成员与分工}
+
+项目由四名成员协作完成，各成员依据技术专长承担主要职责，并通过文档和规范降低人员交接成本。成员分工如表~\ref{tab:team} 所示。
+
+\begin{table}[H]
+\centering
+\caption{团队成员与分工}
+\label{tab:team}
+\begin{tabular}{p{2cm}p{5.5cm}p{5.7cm}}
+\toprule
+\textbf{成员} & \textbf{主要职责} & \textbf{备份与协作机制} \\
+\midrule
+郑博文 & 项目管理、需求统筹、答辩材料整理 & 维护进度计划和课程要求对照表，协调文档合并与版本管理。 \\
+\addlinespace
+林子尧 & 后端开发、数据库设计、接口实现 & 通过接口文档和自动化测试用例降低后端代码的交接成本。 \\
+\addlinespace
+单彬 & 前端页面、交互流程、图表展示 & 通过组件拆分和统一的 API 客户端封装降低前端页面的维护成本。 \\
+\addlinespace
+沈柔希 & 分类模型、测试、部署与联调 & 维护分类策略配置、测试流程和部署脚本，确保模型链路和部署方案可复现。 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{人员变动预案}
+
+为应对开发过程中可能出现的人员变动风险，团队制定了表~\ref{tab:personnel-contingency} 所示的应急预案。
+
+\begin{table}[H]
+\centering
+\caption{人员变动应急预案}
+\label{tab:personnel-contingency}
+\begin{tabular}{p{3.2cm}p{10cm}}
+\toprule
+\textbf{风险场景} & \textbf{应对方式} \\
+\midrule
+某成员生病或临时缺席 & 通过 Git 提交记录、接口文档和任务拆分让其他成员接手其负责模块的小范围修复工作。 \\
+\addlinespace
+某模块开发严重滞后 & 优先保证 MVP 核心闭环可演示，暂缓模块内的增强功能，待核心流程稳定后再补充。 \\
+\addlinespace
+答辩前关键资料缺失 & 以 README、项目文档、汇报 PPT 和测试结果作为可追溯的证据链，确保交付物完整性。 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{协作机制}
+
+团队协作依托以下工程实践：
+
+\begin{itemize}
+  \item \textbf{版本控制}：使用 Git 进行代码版本管理，所有代码变更通过 Pull Request 合并，保持主分支可运行。
+  \item \textbf{接口约定}：前后端以 OpenAPI 文档为契约，后端接口变更需同步更新文档，前端基于接口文档独立开发。
+  \item \textbf{每日同步}：通过即时通讯工具保持进度同步，关键设计决策通过集中讨论确定并记录在项目文档中。
+  \item \textbf{文档持续化}：需求、设计、测试和部署等各阶段文档随开发过程持续撰写和更新，避免期末集中整理。
+\end{itemize}
+
+\section{风险管理}
+
+项目启动阶段对主要风险进行了识别和评估，并制定了相应的缓解措施。风险矩阵如表~\ref{tab:risk-matrix} 所示。
+
+\begingroup
+\small
+\begin{longtable}{p{3.2cm}p{1.2cm}p{1.2cm}p{1.2cm}p{6.4cm}}
+\caption{项目风险矩阵}
+\label{tab:risk-matrix}\\
+\toprule
+\textbf{风险} & \textbf{概率} & \textbf{影响} & \textbf{等级} & \textbf{缓解措施} \\
+\midrule
+\endfirsthead
+\multicolumn{5}{c}{\small 表~\thetable\quad 项目风险矩阵（续）} \\
+\toprule
+\textbf{风险} & \textbf{概率} & \textbf{影响} & \textbf{等级} & \textbf{缓解措施} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{5}{r}{\small 接下页} \\
+\endfoot
+\bottomrule
+\endlastfoot
+微信、支付宝账单格式差异 & 高 & 中 & 高 & 使用 ParserRegistry 模式处理多平台格式，所有解析器输出统一交易结构，保留测试样例。 \\
+\addlinespace
+大模型分类结果不稳定 & 中 & 中 & 中 & 在交易详情中展示分类理由和置信度；保留规则分类兜底和分类缓存；低置信度交易进入人工校正队列。 \\
+\addlinespace
+外部模型 API 不可用或延迟高 & 中 & 中 & 中 & 支持本地模型服务；外部请求通过统一重试队列串行处理，超时耗尽后标记为 retry\textunderscore failed；可随时切回规则分类。 \\
+\addlinespace
+家庭组织权限配置错误 & 中 & 高 & 高 & 使用 OrganizationMember 角色校验（owner/admin/member）；个人账本默认不受组织功能影响；所有组织接口校验成员身份。 \\
+\addlinespace
+后期时间不足 & 中 & 高 & 高 & 坚持 MVP 优先策略，先保证核心闭环可运行，再补充增强功能和文档润色。 \\
+\addlinespace
+多人协作接口不一致 & 中 & 中 & 中 & 以 OpenAPI 文档为前后端契约；后端测试覆盖核心接口；使用类型定义和统一 API 客户端约束前端请求。 \\
+\addlinespace
+安全设计不足 & 中 & 高 & 高 & 使用 JWT 鉴权、passlib 密码哈希、多用户 user\textunderscore id 隔离；后续安全章节中列出已知改进项和加固建议。 \\
+\addlinespace
+大文件导入性能不足 & 中 & 中 & 中 & 当前限制上传文件规模；后续可通过异步任务、批量写入和 SQL 聚合优化大批量数据处理性能。 \\
+\end{longtable}
+\endgroup
+
+\subsection{变更管理策略}
+
+在迭代开发过程中，各类变更按照表~\ref{tab:change-management} 所示的策略进行处理，以确保变更不会冲击核心闭环的稳定性。
+
+\begin{table}[H]
+\centering
+\caption{变更管理策略}
+\label{tab:change-management}
+\begin{tabular}{p{3cm}p{10.2cm}}
+\toprule
+\textbf{变更类型} & \textbf{处理方式} \\
+\midrule
+新增功能需求 & 先判断是否影响 MVP 核心闭环；若不影响则放入后续增强列表，优先保证当前阶段交付。 \\
+\addlinespace
+接口字段变化 & 后端更新接口文档（自动生成的 OpenAPI schema），前端同步修改 API 客户端和类型定义。 \\
+\addlinespace
+家庭组织权限变化 & 先保证个人账本默认行为不变，在此基础上扩展 organization\textunderscore id 聚合查询的权限校验逻辑。 \\
+\addlinespace
+分类策略变化 & 保留规则兜底，记录每次分类的 provider、置信度和分类理由，确保分类链路可追溯。 \\
+\addlinespace
+页面交互变化 & 优先不破坏主流程（导入→分类→分析→报表），避免在交付前进行大范围 UI 改版。 \\
+\addlinespace
+部署环境变化 & 同时维护本地直接启动和 Docker Compose 两套方案，保障在任何环境下系统均可演示。 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,222 @@
+\chapter{需求分析}
+
+\section{需求获取方法}
+
+本系统的需求通过五种方法获取，覆盖从用户行为分析到工程质量审查的完整链路。
+
+\textbf{真实账单处理流程分析}：项目启动阶段，团队收集支付宝与微信支付的原始账单文件，模拟用户从下载账单、整理数据到生成报表的完整操作流程，提炼出导入、解析、分类、分析、报表五大核心环节，作为功能需求的主要依据。
+
+\textbf{小组讨论与范围界定}：团队依据开发周期与技术能力，对需求进行优先级排序，将核心闭环（认证、导入、分类、分析、报表）确定为最高优先级，将消费人格分析、家庭组织、模型切换等纳入扩展范围，形成清晰的 MVP 边界。
+
+\textbf{误分类案例分析}：团队收集了多种语义误判场景——如“东南大学饭卡充值”被通用分类归为“学习”、连锁便利店消费被归为“购物”而非“餐饮”——驱动了大模型初分、分类理由展示和人工校正工作台的需求。系统需在给出分类建议的同时，提供置信度与推理理由，允许用户在校正工作台中批量修正。
+
+\textbf{原型与联调反馈}：在前后端迭代过程中，前端页面的交互细节和后端接口的返回结构经过多轮联调调整。例如，导入页面的进度轮询机制、校正工作台的左右分栏布局、家庭组织的角色权限控制，均来自原型验证阶段的反馈。
+
+\textbf{工程质量审查}：团队对照安全、隐私、性能、可部署性、可维护性、可测试性等质量维度，识别并补齐非功能需求。这一步骤确保系统不仅是功能可用的原型，也是具备工程质量的交付物。
+
+\headingneedspace{19}
+\section{利益相关者分析}
+
+系统涉及四类利益相关者，其关注点与需求来源如表所示。
+
+\begin{table}[H]
+\centering
+\caption{利益相关者分析}
+\label{tab:stakeholders}
+\begin{tabular}{p{3.2cm} p{5.2cm} p{5.2cm}}
+\toprule
+\textbf{利益相关者} & \textbf{关注点} & \textbf{需求来源} \\
+\midrule
+普通用户 & 上传账单、查看 AI 分类结果、修正语义误判、查看消费画像、生成报表 & 个人记账与财务分析场景 \\
+\hline
+家庭组织管理员 & 创建家庭组织、添加成员、管理角色、查看家庭聚合分析 & 家庭账本协作场景 \\
+\hline
+系统运维人员 & 配置模型供应商、管理重试队列、部署与监控系统 & 系统部署与运维场景 \\
+\hline
+开发与维护人员 & 实现系统功能、控制开发范围、维护代码质量、准备后续扩展 & 工程开发与维护过程 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{功能需求}
+
+系统共识别 15 项功能需求，按优先级分为 P0（核心闭环必备）、P1（完整性与体验增强）和 P2（未来改进）。当前实现覆盖全部 P0 与 P1 需求。
+
+\begingroup
+\small
+\begin{longtable}{p{1.0cm} p{3.5cm} p{0.8cm} p{6.2cm}}
+\caption{功能需求列表}
+\label{tab:functional-requirements}\\
+\toprule
+\textbf{ID} & \textbf{需求描述} & \textbf{优先级} & \textbf{实现依据} \\
+\midrule
+\endfirsthead
+\multicolumn{4}{c}{\small 表~\thetable\quad 功能需求列表（续）} \\
+\toprule
+\textbf{ID} & \textbf{需求描述} & \textbf{优先级} & \textbf{实现依据} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{4}{r}{\small 接下页} \\
+\endfoot
+\bottomrule
+\endlastfoot
+FR-01 & 用户注册、登录及 Token 鉴权 & P0 & \texttt{routes\_auth.py}、前端登录页、JWT 中间件 \\
+\hline
+FR-02 & 多用户数据隔离，账单与报表按用户归属 & P0 & \texttt{dependencies.py} 依赖注入、资源归属校验 \\
+\hline
+FR-03 & 支持微信/支付宝账单文件上传导入 & P0 & \texttt{routes\_imports.py}、导入页面 \\
+\hline
+FR-04 & 不同平台账单统一解析为标准化交易结构 & P0 & \texttt{services/parsers.py}、\texttt{test\_parsers.py} \\
+\hline
+FR-05 & 大模型语义分类，记录来源、置信度与理由 & P0 & \texttt{services/classifiers.py}、\texttt{test\_classifiers.py} \\
+\hline
+FR-06 & 交易列表筛选（日期、平台、分类、关键词）与分页 & P0 & \texttt{routes\_transactions.py}、交易列表页面 \\
+\hline
+FR-07 & 人工校正低置信度或语义误判交易 & P0 & \texttt{routes\_transactions.py} PATCH 接口、校正工作台 \\
+\hline
+FR-08 & 用户自定义分类管理 & P1 & \texttt{routes\_categories.py}、分类管理页面 \\
+\hline
+FR-09 & Dashboard 展示收入、支出、结余、储蓄率、分类占比 & P0 & \texttt{routes\_dashboard.py}、\texttt{services/analytics.py} \\
+\hline
+FR-10 & 消费人格画像、财务健康评分与问卷自评 & P1 & \texttt{routes\_personality.py}、\texttt{services/personality.py} \\
+\hline
+FR-11 & 家庭组织创建与成员角色管理 & P1 & \texttt{routes\_organizations.py}、\texttt{services/organizations.py} \\
+\hline
+FR-12 & 家庭组织 Dashboard 与消费人格聚合 & P1 & \texttt{organization\_id} 查询参数、组织页面 \\
+\hline
+FR-13 & PDF 报表生成与下载，支持个人与家庭模式 & P0 & \texttt{routes\_reports.py}、\texttt{services/reports.py} \\
+\hline
+FR-14 & 分类供应商切换（规则/外部 API/本地模型） & P1 & \texttt{services/classifiers.py} CompositeClassifier \\
+\hline
+FR-15 & 外部模型失败重试队列与管理员控制 & P1 & \texttt{routes\_classification.py}、\texttt{retry\_queue.py} \\
+\end{longtable}
+\endgroup
+
+\headingneedspace{6}
+FR-01 至 FR-07、FR-09、FR-13 构成系统的核心闭环：认证后导入账单并自动分类，经人工校对后产出 Dashboard 分析与 PDF 报表。FR-08、FR-10 至 FR-12、FR-14、FR-15 在此闭环上增加了消费人格画像、家庭协作和运维可控性。
+
+\section{非功能需求}
+
+系统定义了 8 项非功能需求，涵盖安全性、隐私保护、可用性、性能、可部署性、可维护性、可测试性与可扩展性。
+
+\begin{table}[H]
+\centering
+\caption{非功能需求列表}
+\label{tab:nfr}
+\begin{tabular}{p{1.5cm} p{3cm} p{1cm} p{7.8cm}}
+\toprule
+\textbf{ID} & \textbf{需求名称} & \textbf{优先级} & \textbf{说明} \\
+\midrule
+NFR-01 & 安全性 & P0 & 密码采用哈希存储，业务接口均需 JWT 鉴权，资源访问按用户归属校验 \\
+\hline
+NFR-02 & 隐私保护 & P0 & 账单数据、分类结果与 PDF 报表属于敏感个人财务数据，用户间严格隔离 \\
+\hline
+NFR-03 & 可用性 & P0 & 用户可按“导入→初分→校正→分析→报表”路径完成核心任务；家庭功能不破坏个人模式 \\
+\hline
+NFR-04 & 性能 & P1 & 小规模试运行场景下页面与接口保持可交互，大文件与模型调用有风险控制 \\
+\hline
+NFR-05 & 可部署性 & P0 & 支持本地开发模式、Docker Compose 部署与裸机部署三种方式 \\
+\hline
+NFR-06 & 可维护性 & P0 & 前后端分离；后端按 routes/services/models/schemas 分层组织 \\
+\hline
+NFR-07 & 可测试性 & P0 & 后端具备 pytest 自动化测试套件，前端通过 TypeScript 类型检查与生产构建验证 \\
+\hline
+NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部署组件预留扩展接口 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{用户场景分析}
+
+\subsection{普通用户场景}
+
+普通用户的核心场景覆盖“导入—分类—校正—分析—报表”的完整链路：
+
+\begin{enumerate}
+  \item 用户注册账号并登录系统，进入应用主界面。
+  \item 进入账单导入页面，上传微信或支付宝账单文件（CSV 格式）。
+  \item 系统创建导入批次，后台解析账单并将不同平台格式转换为统一交易记录。
+  \item 系统调用大模型对每条交易进行语义初分，记录分类来源、置信度与分类理由。
+  \item 用户在交易列表中按日期、平台、分类、关键词筛选查看交易。
+  \item 在分类校正工作台中，用户查看待校正交易队列，对低置信度或语义误判的分类进行人工修正。
+  \item 用户进入 Dashboard 查看收入支出概览、储蓄率、分类占比图与 Top 商户。
+  \item 用户进入消费人格页面，查看基于交易数据计算的消费人格画像、财务健康评分，并可通过问卷进行自评对比。
+  \item 用户进入报表中心，选择日期范围与导入文件，生成并下载 PDF 报表。
+\end{enumerate}
+
+\subsection{家庭组织场景}
+
+家庭组织场景描述管理员创建家庭、管理成员并查看聚合分析的过程：
+
+\begin{enumerate}
+  \item 用户创建家庭组织，系统自动将创建者设为 owner 角色。
+  \item owner 或 admin 通过用户名搜索添加成员，并可提升普通成员为 admin。
+  \item 家庭成员进入组织页面查看家庭合计收入、支出、交易数与消费人格聚合雷达图。
+  \item owner 或 admin 可触发家庭范围内的重分类操作；普通 member 只能查看聚合结果。
+  \item 不传入 \texttt{organization\_id} 参数时，Dashboard、Personality 和 Reports 仍按个人账本模式工作，保持向后兼容。
+\end{enumerate}
+
+\subsection{系统运维场景}
+
+运维人员关注系统部署、配置与故障恢复：
+
+\begin{enumerate}
+  \item 运维人员配置后端运行环境，包括数据库连接、Redis 缓存、模型供应商与 API 密钥。
+  \item 部署前端静态资源、Nginx 反向代理、FastAPI 后端、PostgreSQL 与 Redis。
+  \item 当模型请求超时或失败时，运维人员通过重试状态接口查看队列中的交易数量与供应商分布。
+  \item 运维人员通过管理界面将历史超时或失败交易重新放入重试队列，恢复分类流程。
+\end{enumerate}
+
+\section{异常场景处理}
+
+系统对以下异常场景定义了明确的预期行为：
+
+\begin{table}[H]
+\centering
+\caption{异常场景与系统预期行为}
+\label{tab:exception-scenarios}
+\begin{tabular}{p{4.8cm} p{8.5cm}}
+\toprule
+\textbf{异常场景} & \textbf{系统预期行为} \\
+\midrule
+用户未登录访问业务接口 & 返回 401 未授权状态码，前端跳转至登录页 \\
+\hline
+用户上传不支持的账单格式 & 导入失败并记录具体错误信息，页面提示用户重新上传 \\
+\hline
+重复导入同一笔交易 & 通过 \texttt{dedupe\_hash} 字段去重，避免重复记录入库 \\
+\hline
+模型供应商不可用 & 交易进入重试队列，后台串行重试；超时耗尽后标记为 retry\_failed \\
+\hline
+用户尝试访问他人报表或交易 & 后端按 \texttt{current\_user.id} 校验资源归属，拒绝非授权访问 \\
+\hline
+报表生成失败 & 记录任务状态与错误信息，用户可调整参数后重新触发生成 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{用例建模}
+
+系统用例图展示三类参与者（普通用户、家庭管理员、系统运维人员）与系统功能之间的关系。普通用户可操作认证、导入、查看交易、校正分类、管理自定义分类、查看 Dashboard、生成报表、查看消费人格等用例；家庭管理员额外可创建组织和管理成员；系统运维人员负责供应商配置与重试队列管理。导入账单用例包含大模型语义分类作为扩展关系。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\textwidth]{用例图.png}
+  \caption{系统用例图}
+  \label{fig:usecase}
+\end{figure}
+
+\section{业务流程建模}
+
+核心业务活动图描述了从用户登录到报表生成的端到端流程。流程始于用户登录，接着上传账单文件，系统创建导入批次后进行解析和去重；成功解析的交易经过大模型语义初分，高置信度结果直接入库，低置信度交易进入人工复核队列；用户完成校正后，交易数据进入 Dashboard 聚合分析，随后流向消费人格与财务健康分析模块；在报表生成环节，系统根据是否选择家庭组织参数，分别生成个人 PDF 报表或家庭聚合 PDF 报表。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[
+    width=0.58\textwidth,
+    height=0.47\textheight,
+    keepaspectratio
+  ]{核心业务活动图.png}
+  \caption{核心业务活动图}
+  \label{fig:activity}
+\end{figure}

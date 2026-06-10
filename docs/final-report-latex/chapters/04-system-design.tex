@@ -1,0 +1,147 @@
+\chapter{系统设计}
+
+本章阐述\projectname 的架构设计，涵盖总体架构、技术选型、前后端分层设计、数据隔离策略、部署方案以及安全机制。
+
+\section{总体架构}
+
+系统采用四层架构，自上而下分为展示层、网关层、服务层与数据/外部服务层，各层通过 HTTP 协议通信，职责边界清晰。
+
+\begin{enumerate}
+  \item \textbf{展示层}：Vue 3 + Element Plus + ECharts 构建的单页应用，运行于用户浏览器，负责全部用户交互与数据可视化。
+  \item \textbf{网关层}：生产环境使用 Nginx 对外提供静态文件服务，并通过反向代理将 \texttt{/api} 请求转发至后端。开发环境使用 Vite Proxy 实现同源转发。
+  \item \textbf{服务层}：FastAPI 构建的 RESTful API 服务，包含认证、导入、交易、分类、Dashboard 聚合、消费人格、家庭组织及 PDF 报表等业务模块。异步任务通过 Celery Worker 消费，外部模型调用通过 Retry Queue Worker 后台线程串行管理。
+  \item \textbf{数据与外部服务层}：PostgreSQL（生产）/ SQLite（轻量部署）作为主数据库，Redis 作为 Celery 消息代理。外部服务包括 OpenAI-compatible API 与本地模型服务（vLLM），由 Retry Queue Worker 统一调度。
+\end{enumerate}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\textwidth]{系统总体架构图.png}
+  \caption{系统总体架构图}
+  \label{fig:architecture}
+\end{figure}
+
+\section{技术选型}
+
+下表列出各层采用的核心技术及其选型依据。
+
+\begin{table}[H]
+  \centering
+  \caption{技术选型汇总}
+  \label{tab:tech-selection}
+  \begin{tabular}{@{}p{3.0cm} p{2.8cm} p{7.8cm}@{}}
+    \toprule
+    \textbf{技术} & \textbf{用途} & \textbf{选型依据} \\
+    \midrule
+    FastAPI（Python） & 后端 API 框架 & 原生异步支持，自动生成 OpenAPI 文档（/docs、/redoc），Pydantic 请求/响应验证 \\
+    \hline
+    Vue 3 + TypeScript & 前端框架 & 组合式 API 支持高复用的逻辑组织，TypeScript 编译期类型检查降低运行时错误 \\
+    \hline
+    Element Plus & UI 组件库 & 成熟的 Vue 3 组件生态，提供表格、表单、弹窗、导航等企业级组件 \\
+    \hline
+    ECharts & 数据可视化 & 支持雷达图、柱状图、折线图、饼图等，满足 Dashboard 与人格分析的可视化需求 \\
+    \hline
+    SQLAlchemy 2.x & ORM 框架 & Data Mapper 模式解耦领域逻辑与持久化，支持 SQLite/PostgreSQL 双数据库切换 \\
+    \hline
+    Celery + Redis & 异步任务队列 & Celery 提供生产级任务调度与重试，Redis 作为轻量消息代理兼缓存 \\
+    \hline
+    fpdf2 & PDF 生成 & 轻量级 Python PDF 库，无外部依赖，支持 Unicode 中文字体加载 \\
+    \hline
+    Docker Compose & 容器编排 & 一键启动多服务栈，确保开发/测试/生产环境一致性 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{前端架构}
+
+前端代码按职责划分为四层：视图层由 10 个页面组件构成，对应登录、Dashboard、导入、交易列表、校正工作台、分类管理、消费人格、家庭组织、报表中心和系统设置；状态层通过 Pinia Store 管理认证状态与 Token 持久化；通信层基于 Axios 封装 API 客户端，通过请求拦截器自动注入 Bearer Token；路由层使用 Vue Router 配置页面懒加载与导航守卫，未登录用户自动重定向至登录页。类型定义层为全部业务模型提供 TypeScript 接口约束。
+
+前端视觉设计规范以深色导航（\texttt{\#06233D}）、品牌色（\texttt{\#00A884}）与浅灰页面背景（\texttt{\#F5F7FA}）构成统一视觉语言，详见第 4 章。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\textwidth]{UML组件图.png}
+  \caption{UML 组件图}
+  \label{fig:uml-component}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\textwidth]{包图.png}
+  \caption{系统包图}
+  \label{fig:package}
+\end{figure}
+
+\section{后端架构}
+
+后端按分层架构组织为四层。路由层（\texttt{api/}）通过 \texttt{router.py} 统一注册 10 个路由模块，覆盖认证、分类、导入、交易、分类校正、Dashboard、人格分析、家庭组织和报表生成。服务层（\texttt{services/}）承载全部业务逻辑：\texttt{imports.py} 管理导入批次与文件处理，\texttt{parsers.py} 实现多平台账单解析与规范化，\texttt{classifiers.py} 以复合分类链路编排规则、缓存与模型调用，\texttt{retry\_queue.py} 提供后台串行重试池，\texttt{analytics.py} 与 \texttt{personality.py} 负责聚合计算与人格分析，\texttt{organizations.py} 实现家庭组织 CRUD 与角色校验，\texttt{reports.py} 以 Builder 模式构建 PDF 报表。数据层（\texttt{models/entities.py}）定义 12 个 SQLAlchemy ORM 实体，\texttt{schemas/} 按业务域拆分的 Pydantic DTO 负责请求校验与响应序列化。基础设施层（\texttt{db/}、\texttt{core/}、\texttt{tasks/}）提供数据库会话管理、JWT 安全模块、配置加载与 Celery 异步任务定义。
+
+\section{数据隔离策略}
+
+系统通过以下机制保障多用户数据隔离与家庭组织聚合访问：
+
+\begin{enumerate}
+  \item \textbf{个人资源归属}：所有用户私有资源（交易、导入批次、上传文件、分类缓存、报表等）通过 \texttt{user\_id} 外键归属。系统分类的 \texttt{user\_id} 为 NULL，用户自定义分类的 \texttt{user\_id} 指向创建者。
+  \item \textbf{查询过滤}：业务接口通过 Bearer Token 提取当前用户身份，查询时强制附加 \texttt{WHERE user\_id = current\_user.id} 条件。
+  \item \textbf{家庭聚合模式}：家庭组织不改变交易归属。用户选择家庭视图时，前端传入可选 \texttt{organization\_id}。后端先通过 \texttt{OrganizationService} 校验成员身份，再收集组织内全部成员 \texttt{user\_id} 列表，传入 Dashboard、Personality 或 Reports 服务实现跨成员数据聚合。
+  \item \textbf{默认模式}：\texttt{organization\_id} 为可选参数，不传入时各接口按个人账本口径返回数据，保持向后兼容。
+\end{enumerate}
+
+\section{部署架构}
+
+系统支持两种部署模式以适应不同规模的运行环境：
+
+\begin{description}
+  \item[轻量本地部署] 使用 SQLite 作为数据库，\texttt{TASK\_ALWAYS\_EAGER = true} 使 Celery 任务在当前进程同步执行，Retry Queue Worker 在后台线程运行。前端通过 Vite 开发服务器或构建后的静态文件直接访问。
+  \item[生产环境部署] Docker Compose 编排多容器服务栈：PostgreSQL 数据库、Redis 消息代理、Nginx 反向代理 + 静态文件服务、FastAPI/Uvicorn（监听 \texttt{127.0.0.1:8000}）、Celery Worker、Retry Queue Worker 后台线程。外部模型服务作为独立外部依赖。
+\end{description}
+
+通信链路为：用户浏览器 → Nginx（静态资源直接返回，API 请求反向代理至 FastAPI）→ FastAPI 与 PostgreSQL、Redis、Retry Queue Worker 通过内部网络通信。上传文件与 PDF 报表存储于 \texttt{storage/} 目录。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\textwidth]{部署图.png}
+  \caption{系统部署图}
+  \label{fig:deployment}
+\end{figure}
+
+\headingneedspace{28}
+\section{安全机制}
+
+系统的安全设计覆盖认证、授权、数据隔离、注入防护与隐私保护五个层面。
+
+\begingroup
+\small
+\begin{longtable}{@{}p{2.8cm} p{3.8cm} p{3.4cm} p{3.4cm}@{}}
+  \caption{安全机制汇总}
+  \label{tab:security}\\
+    \toprule
+    \textbf{安全风险} & \textbf{应对措施} & \textbf{实现位置} & \textbf{说明} \\
+    \midrule
+    \endfirsthead
+    \multicolumn{4}{c}{\small 表~\thetable\quad 安全机制汇总（续）} \\
+    \toprule
+    \textbf{安全风险} & \textbf{应对措施} & \textbf{实现位置} & \textbf{说明} \\
+    \midrule
+    \endhead
+    \midrule
+    \multicolumn{4}{r}{\small 接下页} \\
+    \endfoot
+    \bottomrule
+    \endlastfoot
+    身份伪造 & 密码哈希（passlib pbkdf2\_sha256），JWT 双令牌（access + refresh） & \texttt{core/security.py} & 密码不存明文；access token 短期有效 \\
+    \hline
+    未授权访问 & Bearer Token 强制验证用户身份 & \texttt{api/dependencies.py} & FastAPI Depends 注入，每条请求自动解码 JWT \\
+    \hline
+    跨用户数据泄露 & 私有资源查询强制附加 user\_id 过滤 & 各 API 路由及服务层 & SQLAlchemy ORM 参数化查询自动转义 \\
+    \hline
+    组织越权操作 & RBAC 角色模型（owner/admin/member） & \texttt{services/organizations.py} & owner 可管理成员与角色，member 仅可查看 \\
+    \hline
+    SQL 注入 & SQLAlchemy ORM 参数化查询 & \texttt{models/entities.py} & 不存在字符串拼接 SQL 的场景 \\
+    \hline
+    恶意文件上传 & 文件大小限制、扩展名白名单（CSV/XLSX） & \texttt{routes\_imports.py} & 后端验证文件类型 \\
+    \hline
+    模型隐私 & 商户名称与商品摘要可能被发送至外部 API & \texttt{services/classifiers.py} & 已识别为风险点；缓解措施含本地模型选项 \\
+\end{longtable}
+\endgroup
+
+安全模块通过 FastAPI 的 \texttt{Depends} 机制将认证逻辑与业务代码解耦：\texttt{get\_current\_user} 从请求头提取并验证 JWT，\texttt{require\_admin} 在此基础上进一步校验管理员身份。此设计使安全策略变更不影响业务逻辑。
