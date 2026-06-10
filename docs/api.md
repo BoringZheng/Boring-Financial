@@ -373,6 +373,39 @@ files=<alipay.xlsx>
 - 需要 Bearer token。
 - 当前用户必须 `is_admin = true`，否则返回 `403`。
 
+### `POST /api/classification/organizations/{organization_id}/retry-all`
+
+家庭组织管理员接口。将指定家庭组织成员的外部 API 超时、等待重试或重试失败交易重新放入统一重试池。
+
+响应：
+
+```json
+{
+  "queued": 12
+}
+```
+
+权限：
+- 需要 Bearer token。
+- 当前用户必须是该组织的 `owner` 或 `admin`，否则返回 `403`。
+
+### `POST /api/classification/organizations/{organization_id}/reclassify`
+
+家庭组织管理员接口。对指定家庭组织内的交易重新分类。接口会校验交易是否属于组织成员。
+
+请求：
+
+```json
+{
+  "transaction_ids": [1, 2, 3],
+  "provider": "local_model"
+}
+```
+
+权限：
+- 需要 Bearer token。
+- 当前用户必须是该组织的 `owner` 或 `admin`，否则返回 `403`。
+
 ### `GET /api/classification/retry-status`
 
 管理员接口。返回重试池聚合状态，用于后台实时监控。接口不会返回商户、备注、交易明细或外部 provider 原始错误。
@@ -418,6 +451,7 @@ files=<alipay.xlsx>
 - `date_to`: 结束时间，ISO datetime 字符串，可选
 - `category_id`: 按分类筛选，可选
 - `uploaded_file_ids`: 按上传文件筛选，可重复传入，可选
+- `organization_id`: 家庭组织 ID，可选；不传时按当前用户个人账本统计，传入时按该组织所有成员聚合统计，当前用户必须是组织成员
 
 响应：
 
@@ -514,7 +548,7 @@ files=<alipay.xlsx>
 
 ### `POST /api/reports`
 
-生成 PDF 报表。所有字段均可选：`date_from` 和 `date_to` 接受 ISO datetime 字符串或空字符串（空字符串视为不限），`title` 不传则使用默认标题，`uploaded_file_ids` 不传则涵盖全部导入文件。
+生成 PDF 报表。所有字段均可选：`date_from` 和 `date_to` 接受 ISO datetime 字符串或空字符串（空字符串视为不限），`title` 不传则使用默认标题，`uploaded_file_ids` 不传则涵盖全部导入文件。可选 query 参数 `organization_id` 用于生成家庭组织成员聚合报表；不传时按当前用户个人账本生成。
 
 请求：
 
@@ -559,7 +593,7 @@ files=<alipay.xlsx>
 
 ### `GET /api/personality/profile`
 
-返回当前用户的消费人格画像和财务健康评分。需要认证。
+返回当前用户的消费人格画像和财务健康评分。需要认证。可选 query 参数 `organization_id` 用于返回家庭组织成员聚合画像；当前用户必须是该组织成员。
 
 响应：
 
@@ -747,15 +781,125 @@ files=<alipay.xlsx>
 | `comparison.biggest_gap.theory_ref` | string | 学术理论依据 |
 | `comparison.bias_analysis` | string | 综合偏差分析文本 |
 
-## 10. 错误码
+## 10. Organizations
+
+家庭组织模块用于在不改变个人账本所有权的前提下提供家庭聚合视图。个人交易仍归属于各自 `user_id`；当用户传入 `organization_id` 时，后端先校验组织成员身份，再把组织成员的 `user_id` 列表传给 Dashboard、Personality、Reports 或家庭范围分类接口。
+
+角色约定：
+
+| 角色 | 权限 |
+|------|------|
+| `owner` | 创建者，拥有成员管理、角色调整、家庭聚合查看和家庭范围重试权限 |
+| `admin` | 可以管理成员、调整普通成员角色、查看家庭聚合数据和触发家庭范围重试 |
+| `member` | 可以查看家庭聚合数据，不能管理成员或触发家庭范围重试 |
+
+### `GET /api/organizations`
+
+返回当前用户加入的家庭组织列表，并附带当前用户在每个组织中的角色。
+
+响应：
+
+```json
+[
+  {
+    "id": 1,
+    "name": "我的家庭",
+    "created_by_user_id": 1,
+    "plan": "free",
+    "subscription_status": "active",
+    "created_at": "2026-06-01T10:00:00",
+    "updated_at": "2026-06-01T10:00:00",
+    "role": "owner"
+  }
+]
+```
+
+### `POST /api/organizations`
+
+创建家庭组织。创建者会自动成为 `owner`。
+
+请求：
+
+```json
+{
+  "name": "我的家庭"
+}
+```
+
+响应：返回 `OrganizationWithRole`，结构同 `GET /api/organizations` 中的单项。
+
+### `PATCH /api/organizations/{organization_id}`
+
+更新组织名称、套餐和订阅状态。仅 `owner` 或 `admin` 可调用。
+
+请求：
+
+```json
+{
+  "name": "我的家庭",
+  "plan": "free",
+  "subscription_status": "active"
+}
+```
+
+### `GET /api/organizations/{organization_id}/members`
+
+返回家庭组织成员列表。组织成员均可查看。
+
+响应：
+
+```json
+[
+  {
+    "id": 1,
+    "organization_id": 1,
+    "user_id": 1,
+    "role": "owner",
+    "username": "boring",
+    "created_at": "2026-06-01T10:00:00",
+    "updated_at": "2026-06-01T10:00:00"
+  }
+]
+```
+
+### `POST /api/organizations/{organization_id}/members`
+
+按用户名添加成员。仅 `owner` 或 `admin` 可调用。
+
+请求：
+
+```json
+{
+  "username": "family_member"
+}
+```
+
+### `PATCH /api/organizations/{organization_id}/members/{user_id}`
+
+调整成员角色。仅 `owner` 或 `admin` 可调用；目标角色只能是 `admin` 或 `member`，不能修改 owner 角色。
+
+请求：
+
+```json
+{
+  "role": "admin"
+}
+```
+
+### `DELETE /api/organizations/{organization_id}/members/{user_id}`
+
+移除组织成员。仅 `owner` 或 `admin` 可调用；不能移除 owner。
+
+## 11. 错误码
 
 - `400`: 参数非法、用户名重复、系统分类非法更新。
 - `401`: 未登录或 token 非法。
+- `403`: 已登录但无权访问，例如不是家庭组织成员，或不是组织 owner/admin。
 - `404`: 资源不存在或不属于当前用户。
 - `422`: 请求体格式不符合 schema（例如缺少必填字段、类型错误）。
 - `500`: 解析错误、模型调用失败、文件生成失败。
 
-## 11. Health
+## 12. Health
 
 ### `GET /health`
 
@@ -767,7 +911,7 @@ files=<alipay.xlsx>
 }
 ```
 
-## 12. 任务状态约定
+## 13. 任务状态约定
 
 当前代码同时支持同步开发态和 Celery 任务形态。导入和报表相关状态建议按以下语义展示：
 
