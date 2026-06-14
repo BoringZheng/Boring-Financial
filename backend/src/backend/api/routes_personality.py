@@ -75,7 +75,7 @@ def submit_quiz(
                 detail=f"第 {i + 1} 题的答案必须在 1-4 之间，收到 {answer}",
             )
 
-    profile_data = compute_personality_profile(db, current_user.id)
+    profile_data = compute_personality_profile(db, [current_user.id])
     data_dimensions = profile_data["dimensions"]
 
     quiz_result = compute_quiz_result(body.answers, data_dimensions)

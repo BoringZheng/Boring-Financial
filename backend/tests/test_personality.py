@@ -4,6 +4,7 @@ import math
 from datetime import datetime
 from decimal import Decimal
 import pytest
+from fastapi.testclient import TestClient
 
 
 class LocalMockTransaction:
@@ -149,3 +150,19 @@ def test_compute_quiz_result_gap_text_mapping() -> None:
     ]
     result = compute_quiz_result(mock_answers, mock_data_dimensions)
     assert "明显" in result["comparison"]["bias_analysis"]
+
+
+def test_submit_quiz_result_uses_current_user_as_user_list(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    response = client.post(
+        "/api/personality/quiz/result",
+        json={"answers": [2] * 10},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["data_profile"]["code"]
+    assert payload["self_assessment"]["dimensions"]
