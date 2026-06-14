@@ -114,7 +114,7 @@ NFR-02 & 隐私保护 & P0 & 账单数据、分类结果与 PDF 报表属于敏�
 \hline
 NFR-03 & 可用性 & P0 & 用户可按“导入→初分→校正→分析→报表”路径完成核心任务；家庭功能不破坏个人模式 \\
 \hline
-NFR-04 & 性能 & P1 & 小规模试运行场景下页面与接口保持可交互，大文件与模型调用有风险控制 \\
+NFR-04 & 性能 & P1 & 非模型调用接口（认证、查询、聚合分析）在单用户正常操作下 P95 响应时间应低于 1 秒；大模型分类调用设有 60 秒超时保护（\texttt{model\_timeout\_seconds=60}）与最多 2 次自动重试；≤1000 笔交易的单批次文件解析阶段应在 10 秒内完成，进度通过轮询接口实时反映 \\
 \hline
 NFR-05 & 可部署性 & P0 & 支持本地开发模式、Docker Compose 部署与裸机部署三种方式 \\
 \hline
@@ -205,6 +205,81 @@ NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部
   \caption{系统用例图}
   \label{fig:usecase}
 \end{figure}
+
+\section{用例规约}
+
+以下对两个核心用例给出结构化用例说明，包含基本流程、替代流程与异常流程。
+
+\subsection{UC-01：导入账单与语义分类}
+
+\begin{table}[H]
+\centering
+\caption{用例规约：导入账单与语义分类}
+\label{tab:uc01}
+\small
+\begin{tabular}{p{2.8cm} p{10.5cm}}
+\toprule
+\textbf{用例名称} & 导入账单与语义分类 \\
+\midrule
+\textbf{参与者} & 普通用户（主）；大模型分类服务（外部系统） \\
+\hline
+\textbf{触发条件} & 用户进入账单导入页面，选择账单文件并点击上传 \\
+\hline
+\textbf{前置条件} & 用户已登录；待上传文件为微信或支付宝 CSV 格式 \\
+\hline
+\textbf{后置条件} & 交易记录入库完毕，语义初分完成，批次状态置为 \texttt{done} 或 \texttt{partial\_failed} \\
+\hline
+\textbf{基本流程} &
+1）用户拖拽或选择账单文件。\newline
+2）前端调用 \texttt{POST /api/imports} 上传文件内容。\newline
+3）系统创建 \texttt{ImportBatch}，将原始文件写入磁盘。\newline
+4）后台线程解析 CSV，将各平台格式转换为统一 \texttt{Transaction} 结构。\newline
+5）对每笔新交易计算 \texttt{dedupe\_hash}，跳过已存在的重复记录。\newline
+6）调用 \texttt{CompositeClassifier}（缓存→外部 API→本地模型→规则回退）进行语义分类，结果写入 \texttt{auto\_category\_id}、\texttt{auto\_confidence}、\texttt{auto\_reason}。\newline
+7）批次状态更新为 \texttt{done}，前端轮询后展示完成提示。\\
+\hline
+\textbf{替代流程 A} & 部分交易模型超时（超过 60 秒）：失败交易标记为 \texttt{retry\_queue}，其余交易正常入库，批次状态置为 \texttt{partial\_failed}。 \\
+\hline
+\textbf{替代流程 B} & 文件含已导入交易：\texttt{dedupe\_hash} 自动去重，跳过重复记录，批次仍正常完成。 \\
+\hline
+\textbf{异常流程} & 文件格式无法识别（非微信／支付宝 CSV）：文件状态标记为 \texttt{failed}，错误信息写入 \texttt{error\_message}，页面提示用户重新上传。 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{UC-02：人工校正分类结果}
+
+\begin{table}[H]
+\centering
+\caption{用例规约：人工校正分类结果}
+\label{tab:uc02}
+\small
+\begin{tabular}{p{2.8cm} p{10.5cm}}
+\toprule
+\textbf{用例名称} & 人工校正分类结果 \\
+\midrule
+\textbf{参与者} & 普通用户 \\
+\hline
+\textbf{触发条件} & 用户进入分类校正工作台 \\
+\hline
+\textbf{前置条件} & 系统中存在 \texttt{needs\_review=true} 的交易记录 \\
+\hline
+\textbf{后置条件} & 目标交易的 \texttt{final\_category\_id} 已更新，\texttt{needs\_review} 置为 \texttt{false}，校正结果实时反映在 Dashboard 及报表数据中 \\
+\hline
+\textbf{基本流程} &
+1）前端加载待校正队列（\texttt{needs\_review=true}，按置信度升序排列）。\newline
+2）用户选中一笔交易，右侧面板展示商户、金额、当前分类、置信度与模型推理理由。\newline
+3）用户从系统分类或自定义分类中选择正确类别，点击"确认校正"。\newline
+4）前端调用 \texttt{PATCH /api/transactions/\{id\}}，提交新的 \texttt{final\_category\_id}。\newline
+5）后端更新交易记录，将 \texttt{needs\_review} 置为 \texttt{false}。\newline
+6）前端从待校正队列移除该交易，自动加载下一笔。\\
+\hline
+\textbf{替代流程} & 用户认为当前分类正确：直接点击"确认当前分类"，后端同样将 \texttt{needs\_review} 置为 \texttt{false}，\texttt{final\_category\_id} 保留原 \texttt{auto\_category\_id}。 \\
+\hline
+\textbf{异常流程} & 所需自定义分类尚不存在：用户跳转至分类管理页面新增分类后，返回工作台重新操作。 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{业务流程建模}
 
