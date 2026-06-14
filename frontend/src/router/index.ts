@@ -2,36 +2,26 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { pinia } from '../stores'
 import AppLayout from '../layouts/AppLayout.vue'
-import LoginPage from '../pages/LoginPage.vue'
-import DashboardPage from '../pages/DashboardPage.vue'
-import ImportsPage from '../pages/ImportsPage.vue'
-import TransactionsPage from '../pages/TransactionsPage.vue'
-import ReviewPage from '../pages/ReviewPage.vue'
-import CategoriesPage from '../pages/CategoriesPage.vue'
-import PersonalityPage from '../pages/PersonalityPage.vue'
-import OrganizationPage from '../pages/OrganizationPage.vue'
-import ReportsPage from '../pages/ReportsPage.vue'
-import SettingsPage from '../pages/SettingsPage.vue'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/login', component: LoginPage },
+    { path: '/login', component: () => import('../pages/LoginPage.vue') },
     {
       path: '/',
       component: AppLayout,
       meta: { requiresAuth: true },
       children: [
         { path: '', redirect: '/dashboard' },
-        { path: 'dashboard', component: DashboardPage },
-        { path: 'imports', component: ImportsPage },
-        { path: 'transactions', component: TransactionsPage },
-        { path: 'review', component: ReviewPage },
-        { path: 'categories', component: CategoriesPage },
-        { path: 'reports', component: ReportsPage },
-        { path: 'personality', component: PersonalityPage },
-        { path: 'organization', component: OrganizationPage },
-        { path: 'settings', component: SettingsPage },
+        { path: 'dashboard', component: () => import('../pages/DashboardPage.vue') },
+        { path: 'imports', component: () => import('../pages/ImportsPage.vue') },
+        { path: 'transactions', component: () => import('../pages/TransactionsPage.vue') },
+        { path: 'review', component: () => import('../pages/ReviewPage.vue') },
+        { path: 'categories', component: () => import('../pages/CategoriesPage.vue') },
+        { path: 'reports', component: () => import('../pages/ReportsPage.vue') },
+        { path: 'personality', component: () => import('../pages/PersonalityPage.vue') },
+        { path: 'organization', component: () => import('../pages/OrganizationPage.vue') },
+        { path: 'settings', component: () => import('../pages/SettingsPage.vue') },
       ],
     },
   ],

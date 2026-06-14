@@ -12,7 +12,7 @@
 
 \subsection{动态测试}
 
-系统后端具备完整的自动化测试套件，位于 \texttt{backend/tests} 目录下，共 15 个文件（含测试辅助模块），其中 14 个为正式测试文件，覆盖安全、认证、导入、交易、分类、解析、分析、人格、组织、报表、可靠性与重试队列等核心领域。测试框架使用 pytest，可通过 \texttt{pytest} 或 \texttt{pytest --cov=backend} 运行。
+系统后端具备完整的自动化测试套件，位于 \texttt{backend/tests} 目录下，共 16 个文件（含 conftest.py 与辅助模块），其中 14 个为正式测试文件，覆盖安全、认证、导入、交易、分类、解析、分析、人格、组织、报表、可靠性与重试队列等核心领域。测试框架使用 pytest，可通过 \texttt{pytest} 或 \texttt{pytest --cov=backend} 运行。
 
 \begin{longtable}{p{5.5cm} p{5cm} p{3cm}}
 \caption{自动化测试覆盖范围}
@@ -64,6 +64,8 @@
 
 全部 59 个测试用例通过，后端整体覆盖率为 75\%。各测试文件覆盖其对应服务或路由模块的核心逻辑路径。
 
+前端除静态类型检查外，还建立了基于 Vitest + happy-dom 的单元测试体系。测试套件位于 \texttt{frontend/src/\_\_tests\_\_/} 目录下，覆盖认证状态管理（Pinia Store 的 token 持久化、login/logout 流程）、API 客户端拦截器（Authorization Header 注入逻辑）、路由守卫（未登录重定向、已登录跳转、fetchMe 调用时机）以及重试进度 Composable（SSE 流解析、百分比计算、异常恢复）。运行命令为 \texttt{npm run test}，全部 26 个测试用例通过。
+
 前端构建测试包含两个阶段：TypeScript 类型检查（\texttt{vue-tsc --noEmit}）与 Vite 生产构建（\texttt{vite build}）。验证时通过 \texttt{npm ci} 安装依赖后执行 \texttt{npm run build}，两个阶段均通过，无类型错误或编译错误。Vite 构建输出提示部分 chunk 大小超过 500 KB，主要来源于 Element Plus 与 ECharts 组件库，属于后续性能优化项，不影响功能完整性。
 
 \begin{table}[H]
@@ -77,6 +79,8 @@
 后端 pytest 单元/集成测试 & 59/59 通过 & 覆盖 14 个测试文件 \\
 \hline
 后端代码覆盖率 & 75\% & \texttt{pytest --cov=backend} 统计 \\
+\hline
+前端 Vitest 单元测试 & 26/26 通过 & 覆盖 4 个测试文件 \\
 \hline
 前端 TypeScript 类型检查 & 通过 & \texttt{vue-tsc --noEmit} 无错误 \\
 \hline
