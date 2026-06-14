@@ -25,6 +25,7 @@ class User(TimestampMixin, Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    preferences: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Category(TimestampMixin, Base):

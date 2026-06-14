@@ -8,6 +8,7 @@ from backend.api.routes_imports import router as imports_router
 from backend.api.routes_organizations import router as organizations_router
 from backend.api.routes_personality import router as personality_router
 from backend.api.routes_reports import router as reports_router
+from backend.api.routes_settings import router as settings_router
 from backend.api.routes_transactions import router as transactions_router
 
 api_router = APIRouter()
@@ -20,3 +21,4 @@ api_router.include_router(classification_router, prefix="/classification", tags=
 api_router.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(reports_router, prefix="/reports", tags=["reports"])
 api_router.include_router(personality_router, prefix="/personality", tags=["personality"])
+api_router.include_router(settings_router, prefix="/settings", tags=["settings"])

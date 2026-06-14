@@ -12,6 +12,9 @@ const settingsForm = reactive({
   localModel: 'Qwen2.5-7B-Instruct',
 })
 
+const settingsLoading = ref(false)
+const settingsSaving = ref(false)
+
 const thresholdText = computed(() => `${Math.round(settingsForm.lowConfidenceThreshold * 100)}%`)
 const auth = useAuthStore()
 const { requeueProgress, requeueRunning, requeuePercent, startRequeue } = useRetryProgress()
@@ -36,6 +39,43 @@ type RetryQueueStatus = {
   batch_failed: number
   batch_pending: number
   batch_ts: string | null
+}
+
+async function loadSettings() {
+  settingsLoading.value = true
+  try {
+    const { data } = await api.get<{
+      provider: string
+      low_confidence_threshold: number
+      openai_model: string
+      local_model: string
+    }>('/settings')
+    settingsForm.provider = data.provider
+    settingsForm.lowConfidenceThreshold = data.low_confidence_threshold
+    settingsForm.openaiModel = data.openai_model
+    settingsForm.localModel = data.local_model
+  } catch {
+    // Use defaults on failure
+  } finally {
+    settingsLoading.value = false
+  }
+}
+
+async function saveSettings() {
+  settingsSaving.value = true
+  try {
+    await api.put('/settings', {
+      provider: settingsForm.provider,
+      low_confidence_threshold: settingsForm.lowConfidenceThreshold,
+      openai_model: settingsForm.openaiModel,
+      local_model: settingsForm.localModel,
+    })
+    ElMessage.success('设置已保存')
+  } catch {
+    ElMessage.error('保存失败')
+  } finally {
+    settingsSaving.value = false
+  }
 }
 
 const workerPercent = computed(() => {
@@ -98,6 +138,7 @@ watch(
 )
 
 onMounted(() => {
+  loadSettings()
   startRetryStatusPolling()
 })
 
@@ -111,15 +152,15 @@ onUnmounted(() => {
     <div class="page-heading">
       <div>
         <h1>系统设置</h1>
-        <p>用于课程演示的分类策略与模型配置面板。本阶段仅保留前端状态，不伪造后端保存。</p>
+        <p>分类策略与模型配置面板，设置将自动保存至服务器。</p>
       </div>
     </div>
 
     <section class="settings-grid">
-      <div class="panel card settings-main">
+      <div class="panel card settings-main" v-loading="settingsLoading">
         <div class="section-title">
           <h2>分类策略</h2>
-          <span>影响 demo 中的重分类展示口径</span>
+          <span>选择分类供应商并调整置信度阈值</span>
         </div>
         <el-form label-position="top">
           <el-form-item label="分类策略">
@@ -141,6 +182,9 @@ onUnmounted(() => {
           </el-form-item>
           <el-form-item label="本地模型">
             <el-input v-model="settingsForm.localModel" />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="settingsSaving" @click="saveSettings">保存设置</el-button>
           </el-form-item>
         </el-form>
       </div>

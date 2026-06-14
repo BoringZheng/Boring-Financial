@@ -31,9 +31,9 @@
 
 分类子系统围绕策略、责任链与外观三种模式组织，由五个类构成。
 
-\texttt{CompositeClassifier}（\texttt{services/classifiers.py:267}）作为外观入口封装分类全流程。其 \texttt{classify()} 方法编排四级责任链：检查 \texttt{ClassificationCache} 缓存 → 调用外部模型 API → 调用本地模型 → \texttt{RuleBasedClassifier} 规则兜底。外部模型请求通过重试队列异步入队，避免并发 API 调用；超时异常经指数退避重试，达到上限后标记为 \texttt{retry\_failed} 并从活跃队列移除。\texttt{OpenAICompatibleClassifier} 与 \texttt{LocalModelClassifier} 均实现统一的 \texttt{classify(transaction) -> ClassificationOutput} 调用约定——前者通过 httpx 调用 OpenAI-compatible \texttt{/chat/completions}，后者继承前者并覆盖 provider 配置指向本地 vLLM 服务。\texttt{RuleBasedClassifier} 按优先级匹配分类规则，命中返回置信度 0.99，未命中返回 None。\texttt{ClassificationOutput} 作为 dataclass 统一承载分类结果。
+\texttt{CompositeClassifier}（\texttt{services/classifiers.py:267}）作为外观入口封装分类全流程。其 \texttt{classify()} 方法编排三级责任链：检查 \texttt{ClassificationCache} 缓存 → 调用模型 API（外部模型或本地模型，由配置决定）→ \texttt{RuleBasedClassifier} 规则兜底。外部模型请求通过重试队列异步入队，避免并发 API 调用；超时异常经指数退避重试，达到上限后标记为 \texttt{retry\_failed} 并从活跃队列移除。\texttt{OpenAICompatibleClassifier} 与 \texttt{LocalModelClassifier} 均实现统一的 \texttt{classify(transaction) -> ClassificationOutput} 调用约定——前者通过 httpx 调用 OpenAI-compatible \texttt{/chat/completions}，后者继承前者并覆盖 provider 配置指向本地 vLLM 服务，两者作为同一层级的可替换策略。\texttt{RuleBasedClassifier} 按优先级匹配分类规则，命中返回置信度 0.99，未命中返回 None。\texttt{ClassificationOutput} 作为 dataclass 统一承载分类结果。
 
-Strategy 模式使三种分类器可互换，各自封装不同的分类逻辑。Chain of Responsibility 提供优雅降级路径——缓存命中直接返回，API 不可用时自动降至规则。Facade 模式将缓存管理、重试逻辑、结果存储等复杂性隐藏在 \texttt{classify()} 内部，调用方只需传入交易对象。
+Strategy 模式使三种分类器可互换，各自封装不同的分类逻辑。Chain of Responsibility 提供优雅降级路径——缓存命中直接返回，模型不可用时自动降至规则。Facade 模式将缓存管理、重试逻辑、结果存储等复杂性隐藏在 \texttt{classify()} 内部，调用方只需传入交易对象。
 
 \begin{figure}[!htbp]
   \centering
@@ -165,7 +165,7 @@ Builder 模式使每个方法关注单一渲染关注点，扩展新章节只需
 
 \subsection{账单导入与大模型初分}
 
-用户上传账单文件的完整处理链路包含六个阶段。(1) 前端通过 \texttt{POST /api/imports} 上传文件，后端创建 \texttt{ImportBatch} 与 \texttt{UploadedFile}，前端轮询 \texttt{GET /api/imports} 跟踪批次进度。(2) \texttt{ParserRegistry} 检测平台后，由 \texttt{StatementReader} 读取文件，对应平台解析器将原生列映射为 \texttt{ParsedTransaction}。(3) \texttt{TransactionNormalizer} 做 NFKC 归一化并生成 \texttt{dedupe\_hash}，写入前按唯一约束去重。(4) 每笔交易传入 \texttt{CompositeClassifier.classify()}，按缓存→API→规则的顺序获取分类结果。外部模型请求进入重试队列由后台线程串行消费，超时则指数退避重试。(5) 分类结果同时写入 \texttt{transactions} 表（更新 \texttt{auto\_category\_id/confidence/provider/needs\_review}）和 \texttt{classification\_results} 表（新增不可变历史记录）。(6) 全部交易处理完毕后，\texttt{ImportBatch.status} 更新为 \texttt{done} 或 \texttt{partial\_failed}。
+用户上传账单文件的完整处理链路包含六个阶段。(1) 前端通过 \texttt{POST /api/imports} 上传文件，后端创建 \texttt{ImportBatch} 与 \texttt{UploadedFile}，前端轮询 \texttt{GET /api/imports} 跟踪批次进度。(2) \texttt{ParserRegistry} 检测平台后，由 \texttt{StatementReader} 读取文件，对应平台解析器将原生列映射为 \texttt{ParsedTransaction}。(3) \texttt{TransactionNormalizer} 做 NFKC 归一化并生成 \texttt{dedupe\_hash}，写入前按唯一约束去重。(4) 每笔交易传入 \texttt{CompositeClassifier.classify()}，按缓存→模型→规则的顺序获取分类结果。外部模型请求进入重试队列由后台线程串行消费，超时则按指数退避策略重试（等待间隔为 $\text{base\_delay} \times 2^{\text{retry\_count}}$，上限 300 秒）。(5) 分类结果同时写入 \texttt{transactions} 表（更新 \texttt{auto\_category\_id/confidence/provider/needs\_review}）和 \texttt{classification\_results} 表（新增不可变历史记录）。(6) 全部交易处理完毕后，\texttt{ImportBatch.status} 更新为 \texttt{done} 或 \texttt{partial\_failed}。
 
 \begin{figure}[H]
   \centering

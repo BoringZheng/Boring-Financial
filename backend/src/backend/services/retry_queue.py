@@ -38,12 +38,13 @@ def run_retry_queue_worker(stop_event: threading.Event) -> None:
 
     Transactions with ``auto_provider == "retry_queue"`` are picked up in
     FIFO order (ordered by api_retry_count ASC so earlier failures get
-    priority).  After each attempt the worker sleeps **delay_seconds**
-    to rate-limit requests to the external API.  When the queue is empty
-    it sleeps **poll_seconds** before checking again.
+    priority).  After each attempt the worker sleeps using **exponential
+    backoff** based on the transaction's retry count to avoid flooding the
+    external API.  When the queue is empty it sleeps **poll_seconds** before
+    checking again.
     """
     logger.info(
-        "Retry queue worker started (max_retries=%d, delay=%.1fs, poll=%.1fs)",
+        "Retry queue worker started (max_retries=%d, base_delay=%.1fs, poll=%.1fs)",
         settings.retry_queue_max_retries,
         settings.retry_queue_delay_seconds,
         settings.retry_queue_poll_seconds,
@@ -63,21 +64,27 @@ def run_retry_queue_worker(stop_event: threading.Event) -> None:
                 stop_event.wait(settings.retry_queue_poll_seconds)
                 continue
 
+            retry_count = txn.api_retry_count
             logger.info(
                 "Retrying transaction %d (attempt %d/%d)",
                 txn.id,
-                txn.api_retry_count + 1,
+                retry_count + 1,
                 settings.retry_queue_max_retries,
             )
             _retry_one(db, txn)
 
         except Exception as exc:
             logger.error("Retry worker error: %s", exc)
+            retry_count = 0
         finally:
             db.close()
 
-        # Rate-limit between requests so the external API is not flooded
-        stop_event.wait(settings.retry_queue_delay_seconds)
+        # Exponential backoff: base_delay * 2^retry_count, capped at 5 minutes
+        backoff_delay = min(
+            settings.retry_queue_delay_seconds * (2 ** retry_count),
+            300.0,
+        )
+        stop_event.wait(backoff_delay)
 
     logger.info("Retry queue worker stopped")
 

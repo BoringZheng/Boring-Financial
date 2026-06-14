@@ -45,7 +45,7 @@
 \hline
 \path{test_analytics.py} & Dashboard 聚合计算 & 1 \\
 \hline
-\path{test_personality.py} & 人格维度计算、问卷对比、边界条件 & 2 \\
+\path{test_personality.py} & 人格维度计算、问卷对比、边界条件 & 8 \\
 \hline
 \path{test_organizations.py} & 组织创建、成员权限、家庭聚合、个人模式兼容 & 13 \\
 \hline
@@ -62,7 +62,7 @@
 
 \section{测试结果}
 
-全部 53 个测试用例通过，后端整体覆盖率为 74\%。各测试文件覆盖其对应服务或路由模块的核心逻辑路径。
+全部 59 个测试用例通过，后端整体覆盖率为 75\%。各测试文件覆盖其对应服务或路由模块的核心逻辑路径。
 
 前端构建测试包含两个阶段：TypeScript 类型检查（\texttt{vue-tsc --noEmit}）与 Vite 生产构建（\texttt{vite build}）。验证时通过 \texttt{npm ci} 安装依赖后执行 \texttt{npm run build}，两个阶段均通过，无类型错误或编译错误。Vite 构建输出提示部分 chunk 大小超过 500 KB，主要来源于 Element Plus 与 ECharts 组件库，属于后续性能优化项，不影响功能完整性。
 
@@ -74,9 +74,9 @@
 \toprule
 \textbf{测试类型} & \textbf{结果} & \textbf{说明} \\
 \midrule
-后端 pytest 单元/集成测试 & 53/53 通过 & 覆盖 14 个测试文件 \\
+后端 pytest 单元/集成测试 & 59/59 通过 & 覆盖 14 个测试文件 \\
 \hline
-后端代码覆盖率 & 74\% & \texttt{pytest --cov=backend} 统计 \\
+后端代码覆盖率 & 75\% & \texttt{pytest --cov=backend} 统计 \\
 \hline
 前端 TypeScript 类型检查 & 通过 & \texttt{vue-tsc --noEmit} 无错误 \\
 \hline
@@ -154,4 +154,4 @@
 
 管理员账号通过后端 CLI 工具创建，不提供公开注册入口。生产环境配置包括环境变量注入（数据库连接、模型 API 密钥、Redis 地址等），通过 Docker Compose 的 \texttt{env\_file} 或裸机部署的环境变量文件管理。
 
-系统当前版本已交付的完整功能包括：用户认证与数据隔离、微信/支付宝账单导入与解析、大模型语义分类与人工校正、Dashboard 财务分析、消费人格画像与财务健康评分、家庭组织管理与聚合分析、PDF 报表生成与下载、多供应商分类切换与重试队列容错。系统具备生产级部署能力，后端测试覆盖率达到 74\%，前端构建通过类型检查与生产构建验证。
+系统当前版本已交付的完整功能包括：用户认证与数据隔离、微信/支付宝账单导入与解析、大模型语义分类与人工校正、Dashboard 财务分析、消费人格画像与财务健康评分、家庭组织管理与聚合分析、PDF 报表生成与下载、多供应商分类切换与重试队列容错。系统具备生产级部署能力，后端测试覆盖率达到 75\%，前端构建通过类型检查与生产构建验证。

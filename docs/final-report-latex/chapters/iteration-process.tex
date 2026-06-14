@@ -1,0 +1,179 @@
+\section{开发迭代过程}
+
+本项目采用增量迭代模型，每个迭代周期聚焦一个功能模块，以 Pull Request 为交付单元，经代码审查后合入主干。以下按时间线记录各迭代的目标、产出与关键决策。
+
+\subsection{迭代总览}
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{开发迭代时间线}
+  \label{tab:iteration-timeline}
+  \begin{tabular}{@{}p{1.2cm} p{2.8cm} p{4.5cm} p{4.5cm}@{}}
+    \toprule
+    \textbf{迭代} & \textbf{时间} & \textbf{目标} & \textbf{产出} \\
+    \midrule
+    v1.0 & 2025.08 & 概念验证——Python 脚本实现账单合并 & 单文件脚本，PDF 报表输出 \\
+    \hline
+    v2.0 & 2025.08 & 桌面工具化——打包为可执行文件 & .exe 版本，支持多文件合并 \\
+    \hline
+    Sprint 1 & 2026.03 & 架构重构——全栈 Web 化 & FastAPI + Vue 3 monorepo，Docker 部署 \\
+    \hline
+    Sprint 2 & 2026.05.01--25 & 核心功能闭环 & 前端 UI、分类器、重试队列、管理员面板 \\
+    \hline
+    Sprint 3 & 2026.06.01--04 & 扩展功能与质量保障 & 测试套件、家庭组织、前端优化 \\
+    \hline
+    Sprint 4 & 2026.06.05--14 & 测试加固与文档交付 & 人格测试、报告撰写、Bug 修复 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{迭代 1：概念验证与桌面工具（2025.08）}
+
+\textbf{目标}：验证"微信/支付宝账单自动合并+分类"的核心价值假设。
+
+\textbf{产出}：
+\begin{itemize}
+  \item \texttt{merge\_bills.py}：合并多平台 CSV 为统一格式
+  \item \texttt{generate\_report.py}：基于分类规则生成 PDF 报表
+  \item \texttt{oneclick\_bills.py}：一键处理脚本（后打包为 .exe）
+\end{itemize}
+
+\textbf{关键决策}：
+\begin{itemize}
+  \item 选择 CSV 作为输入格式（用户可直接从微信/支付宝导出）
+  \item 采用关键词匹配实现初版分类（无 AI 参与）
+  \item 发现局限：单机脚本无法支持多用户、无法迭代分类规则
+\end{itemize}
+
+\textbf{迭代反馈}：脚本在个人使用中验证了需求真实性，但分类准确率不足（仅 60\%），且无法支持交互式校正。决定在下一阶段引入大模型语义分类与 Web 界面。
+
+\subsection{迭代 2：全栈架构重构（2026.03）}
+
+\textbf{目标}：从单文件脚本演进为生产级 Web 应用。
+
+\textbf{产出}：
+\begin{itemize}
+  \item 前后端分离 monorepo 结构（\texttt{backend/} + \texttt{frontend/}）
+  \item FastAPI + SQLAlchemy ORM + PostgreSQL/SQLite 双模式
+  \item Docker Compose 一键部署方案
+  \item 裸机部署脚本（Ubuntu 22.04 + systemd + Nginx）
+\end{itemize}
+
+\textbf{关键决策}：
+\begin{itemize}
+  \item 选择 FastAPI 而非 Django：异步支持好、自动生成 OpenAPI 文档、轻量
+  \item 支持 SQLite 低配模式：降低开发与部署门槛
+  \item 前端选择 Vue 3 + TypeScript + Element Plus：类型安全、组件库成熟
+\end{itemize}
+
+\subsection{迭代 3：核心功能闭环（2026.05）}
+
+\textbf{目标}：实现 FR-01 至 FR-09 核心需求闭环。
+
+\textbf{产出}（按提交时间线）：
+\begin{enumerate}
+  \item 前端 10 页面 UI 设计与实现（Dashboard、导入、交易、校正等）
+  \item 消费人格分析系统（四维计算 + 16 类型 + 财务健康评分）
+  \item 大模型语义分类集成（OpenAI-compatible API）
+  \item \textbf{重试队列子系统}（7 个连续提交实现）：
+    \begin{itemize}
+      \item 添加 \texttt{api\_retry\_count} 列
+      \item 将外部 API 失败从同步重试改为异步入队
+      \item 实现后台 Worker 线程串行消费
+      \item 添加管理员 CLI 命令
+      \item 前端展示重试状态标签
+    \end{itemize}
+  \item 管理员权限系统与设置面板
+\end{enumerate}
+
+\textbf{关键决策}：
+\begin{itemize}
+  \item 外部模型超时从"阻塞重试"改为"入队异步重试"——解决大批量导入时的超时雪崩问题
+  \item 采用指数退避策略（$\text{delay} \times 2^n$）避免 API 限流
+  \item 管理员与普通用户分离，管理员可操作重试队列
+\end{itemize}
+
+\textbf{迭代反馈}：实际部署后发现并修复了账单解析编码问题（GBK/UTF-8 混合）和已确认交易的重校正 Bug。
+
+\subsection{迭代 4：扩展功能与质量保障（2026.06.01--04）}
+
+本迭代通过 3 个 Pull Request 并行推进：
+
+\textbf{PR \#1 — 自动化测试基线}（2026.06.01）：
+\begin{itemize}
+  \item 建立 pytest 测试框架，添加 API 集成测试与解析器单元测试
+  \item 为后续迭代提供回归保护
+\end{itemize}
+
+\textbf{PR \#2 — 前端 UI 优化}（2026.06.02--03）：
+\begin{itemize}
+  \item 图表配色统一，模块间距优化
+  \item 响应式布局适配窄屏设备
+  \item PR Review 后修复反馈问题
+\end{itemize}
+
+\textbf{PR \#3 — 家庭组织功能}（2026.06.03--04）：
+\begin{itemize}
+  \item 数据模型层：\texttt{Organization} + \texttt{OrganizationMember} 实体
+  \item 服务层：RBAC 权限校验（owner/admin/member）
+  \item API 层：扩展 Dashboard、Personality、Reports 支持 \texttt{organization\_id} 参数
+  \item 前端：组织管理页面、家庭聚合雷达图
+  \item 重试队列增强：SSE 进度推送、Worker 批次状态追踪
+  \item 测试：13 个组织相关测试用例
+\end{itemize}
+
+\textbf{关键决策}：
+\begin{itemize}
+  \item 家庭聚合采用"非侵入式设计"——不修改交易归属，通过查询参数扩展作用域
+  \item 后端接口向后兼容——不传 \texttt{organization\_id} 则行为与个人模式一致
+\end{itemize}
+
+\subsection{迭代 5：测试加固与文档交付（2026.06.05--14）}
+
+\textbf{PR \#4 — 人格算法测试}（2026.06.05--08）：
+\begin{itemize}
+  \item 补充人格维度计算的边界条件测试（空交易、单分类、极端偏差等）
+  \item 验证问卷对比逻辑的数值正确性
+\end{itemize}
+
+\textbf{PR \#5 — 报告文档化}（2026.06.10）：
+\begin{itemize}
+  \item 编写 LaTeX 格式课程报告（含架构图、类图、顺序图）
+  \item 统一项目文档与报告口径
+\end{itemize}
+
+\textbf{PR \#6 — 报告加固}（2026.06.14）：
+\begin{itemize}
+  \item 根据课程评分标准补充需求追踪、非功能需求等章节
+\end{itemize}
+
+\textbf{PR \#7 — Bug 修复}（2026.06.14）：
+\begin{itemize}
+  \item 修复人格问卷提交时的参数传递错误
+  \item 补充对应测试用例防止回归
+\end{itemize}
+
+\subsection{迭代回顾}
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{迭代过程中的主要问题与应对}
+  \label{tab:iteration-issues}
+  \begin{tabular}{@{}p{3.5cm} p{4.5cm} p{5cm}@{}}
+    \toprule
+    \textbf{问题} & \textbf{发现方式} & \textbf{应对措施} \\
+    \midrule
+    外部 API 超时雪崩 & 生产环境大批量导入 & 重构为异步重试队列 + 指数退避 \\
+    \hline
+    账单编码混乱 & 用户上传 GBK 文件报错 & StatementReader 自动检测 6 种编码 \\
+    \hline
+    已确认交易被重校正 & 手工测试发现 & 添加 \texttt{final\_category\_id} 保护逻辑 \\
+    \hline
+    组织聚合破坏个人模式 & 单元测试发现 & 确保无 org\_id 时行为不变 \\
+    \hline
+    人格问卷提交失败 & 前端联调发现 & 修复 API 参数传递 + 补充测试 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
