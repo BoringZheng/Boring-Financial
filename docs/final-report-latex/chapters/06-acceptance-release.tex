@@ -2,6 +2,16 @@
 
 \section{自动化测试}
 
+\subsection{静态代码验证}
+
+在动态测试之前，团队采用了两类静态验证手段。
+
+\textbf{TypeScript 类型检查}：前端 \texttt{build} 脚本将 \texttt{vue-tsc --noEmit} 配置为必要前置步骤，任何类型不兼容错误均会阻断构建流程。该检查覆盖全部页面组件、Pinia Store、API 接口封装与 \texttt{types/} 目录下的所有接口定义，确保前端数据结构与后端 API 契约的类型一致性。
+
+\textbf{代码走查}：每个开发迭代完成后，团队成员对本迭代新增代码进行交叉走查（code walkthrough），重点核查认证与鉴权路径（\texttt{get\_current\_user} 依赖注入、资源归属校验）、多用户数据隔离边界与分类器异常分支的覆盖情况，走查意见在迭代内即时修正。
+
+\subsection{动态测试}
+
 系统后端具备完整的自动化测试套件，位于 \texttt{backend/tests} 目录下，共 15 个文件（含测试辅助模块），其中 14 个为正式测试文件，覆盖安全、认证、导入、交易、分类、解析、分析、人格、组织、报表、可靠性与重试队列等核心领域。测试框架使用 pytest，可通过 \texttt{pytest} 或 \texttt{pytest --cov=backend} 运行。
 
 \begin{longtable}{p{5.5cm} p{5cm} p{3cm}}
