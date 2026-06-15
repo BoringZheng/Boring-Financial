@@ -2,11 +2,11 @@
 
 \section{需求获取方法}
 
-本系统的需求通过五种方法获取，覆盖从用户行为分析到工程质量审查的完整链路。
+本系统的需求通过五种方法获取，覆盖从用户行为分析到工程质量审查的完整过程。
 
 \textbf{真实账单处理流程分析}：项目启动阶段，团队收集支付宝与微信支付的原始账单文件，模拟用户从下载账单、整理数据到生成报表的完整操作流程，提炼出导入、解析、分类、分析、报表五大核心环节，作为功能需求的主要依据。
 
-\textbf{小组讨论与范围界定}：团队依据开发周期与技术能力，对需求进行优先级排序，将核心闭环（认证、导入、分类、分析、报表）确定为最高优先级，将消费人格分析、家庭组织、模型切换等纳入扩展范围，形成清晰的 MVP 边界。
+\textbf{小组讨论与范围界定}：团队依据开发周期与技术能力，对需求进行优先级排序，将认证、导入、分类、分析和报表构成的核心业务流程确定为最高优先级，将消费人格分析、家庭组织、模型切换等纳入扩展范围，形成清晰的最小可行产品边界。
 
 \textbf{误分类案例分析}：团队收集了多种语义误判场景——如“东南大学饭卡充值”被通用分类归为“学习”、连锁便利店消费被归为“购物”而非“餐饮”——驱动了大模型初分、分类理由展示和人工校正工作台的需求。系统需在给出分类建议的同时，提供置信度与推理理由，允许用户在校正工作台中批量修正。
 
@@ -40,7 +40,7 @@
 
 \section{功能需求}
 
-系统共识别 15 项功能需求，按优先级分为 P0（核心闭环必备）、P1（完整性与体验增强）和 P2（未来改进）。当前实现覆盖全部 P0 与 P1 需求。
+系统共识别 15 项功能需求，按优先级分为 P0（核心业务流程必备）、P1（完整性与体验增强）和 P2（未来改进）。当前实现覆盖全部 P0 与 P1 需求。
 
 \begingroup
 \small
@@ -48,12 +48,12 @@
 \caption{功能需求列表}
 \label{tab:functional-requirements}\\
 \toprule
-\textbf{ID} & \textbf{需求描述} & \textbf{优先级} & \textbf{实现依据} \\
+\textbf{ID} & \textbf{需求描述} & \textbf{优先级} & \textbf{对应模块与验收依据} \\
 \midrule
 \endfirsthead
 \multicolumn{4}{c}{\small 表~\thetable\quad 功能需求列表（续）} \\
 \toprule
-\textbf{ID} & \textbf{需求描述} & \textbf{优先级} & \textbf{实现依据} \\
+\textbf{ID} & \textbf{需求描述} & \textbf{优先级} & \textbf{对应模块与验收依据} \\
 \midrule
 \endhead
 \midrule
@@ -61,40 +61,42 @@
 \endfoot
 \bottomrule
 \endlastfoot
-FR-01 & 用户注册、登录及 Token 鉴权 & P0 & \texttt{routes\_auth.py}、前端登录页、JWT 中间件 \\
+FR-01 & 用户注册、登录及身份鉴别 & P0 & 用户认证模块；注册与登录验收场景 \\
 \hline
-FR-02 & 多用户数据隔离，账单与报表按用户归属 & P0 & \texttt{dependencies.py} 依赖注入、资源归属校验 \\
+FR-02 & 多用户数据隔离，账单与报表按用户归属 & P0 & 数据隔离机制；跨用户访问验证 \\
 \hline
-FR-03 & 支持微信/支付宝账单文件上传导入 & P0 & \texttt{routes\_imports.py}、导入页面 \\
+FR-03 & 支持微信/支付宝账单文件上传导入 & P0 & 账单导入模块；文件上传验收场景 \\
 \hline
-FR-04 & 不同平台账单统一解析为标准化交易结构 & P0 & \texttt{services/parsers.py}、\texttt{test\_parsers.py} \\
+FR-04 & 不同平台账单统一解析为标准化交易结构 & P0 & 账单解析模块；多平台样例验证 \\
 \hline
-FR-05 & 大模型语义分类，记录来源、置信度与理由 & P0 & \texttt{services/classifiers.py}、\texttt{test\_classifiers.py} \\
+FR-05 & 大模型语义分类，记录来源、置信度与理由 & P0 & 智能分类模块；分类结果验证 \\
 \hline
-FR-06 & 交易列表筛选（日期、平台、分类、关键词）与分页 & P0 & \texttt{routes\_transactions.py}、交易列表页面 \\
+FR-06 & 交易列表筛选（日期、平台、分类、关键词）与分页 & P0 & 交易管理模块；筛选与分页验收 \\
 \hline
-FR-07 & 人工校正低置信度或语义误判交易 & P0 & \texttt{routes\_transactions.py} PATCH 接口、校正工作台 \\
+FR-07 & 人工校正低置信度或语义误判交易 & P0 & 人工校正模块；分类修正验收 \\
 \hline
-FR-08 & 用户自定义分类管理 & P1 & \texttt{routes\_categories.py}、分类管理页面 \\
+FR-08 & 用户自定义分类管理 & P1 & 分类管理模块；新增与编辑分类验收 \\
 \hline
-FR-09 & Dashboard 展示收入、支出、结余、储蓄率、分类占比 & P0 & \texttt{routes\_dashboard.py}、\texttt{services/analytics.py} \\
+FR-09 & 财务看板展示收入、支出、结余、储蓄率、分类占比 & P0 & 财务分析模块；看板数据验收 \\
 \hline
-FR-10 & 消费人格画像、财务健康评分与问卷自评 & P1 & \texttt{routes\_personality.py}、\texttt{services/personality.py} \\
+FR-10 & 消费人格画像、财务健康评分与问卷自评 & P1 & 消费人格模块；画像与问卷验收 \\
 \hline
-FR-11 & 家庭组织创建与成员角色管理 & P1 & \texttt{routes\_organizations.py}、\texttt{services/organizations.py} \\
+FR-11 & 家庭组织创建与成员角色管理 & P1 & 家庭组织模块；成员权限验收 \\
 \hline
-FR-12 & 家庭组织 Dashboard 与消费人格聚合 & P1 & \texttt{organization\_id} 查询参数、组织页面 \\
+FR-12 & 家庭组织财务看板与消费人格聚合 & P1 & 家庭聚合分析模块；家庭视图验收 \\
 \hline
-FR-13 & PDF 报表生成与下载，支持个人与家庭模式 & P0 & \texttt{routes\_reports.py}、\texttt{services/reports.py} \\
+FR-13 & PDF 报表生成与下载，支持个人与家庭模式 & P0 & 报表模块；生成与下载验收 \\
 \hline
-FR-14 & 分类供应商切换（规则/外部 API/本地模型） & P1 & \texttt{services/classifiers.py} CompositeClassifier \\
+FR-14 & 分类服务切换（规则/外部 API/本地模型） & P1 & 分类配置模块；切换与降级验证 \\
 \hline
-FR-15 & 外部模型失败重试队列与管理员控制 & P1 & \texttt{routes\_classification.py}、\texttt{retry\_queue.py} \\
+FR-15 & 外部模型失败重试队列与管理员控制 & P1 & 重试管理模块；失败恢复验证 \\
 \end{longtable}
 \endgroup
 
 \headingneedspace{6}
-FR-01 至 FR-07、FR-09、FR-13 构成系统的核心闭环：认证后导入账单并自动分类，经人工校对后产出 Dashboard 分析与 PDF 报表。FR-08、FR-10 至 FR-12、FR-14、FR-15 在此闭环上增加了消费人格画像、家庭协作和运维可控性。
+FR-01 至 FR-07、FR-09、FR-13 构成系统的核心业务流程：认证后导入账单并自动分类，经人工校对后产出财务看板与 PDF 报表。FR-08、FR-10 至 FR-12、FR-14、FR-15 在此基础上增加了消费人格画像、家庭协作和运维可控性。
+
+\input{chapters/02-requirements-modules}
 
 \section{非功能需求}
 
@@ -114,24 +116,26 @@ NFR-02 & 隐私保护 & P0 & 账单数据、分类结果与 PDF 报表属于敏�
 \hline
 NFR-03 & 可用性 & P0 & 用户可按“导入→初分→校正→分析→报表”路径完成核心任务；家庭功能不破坏个人模式 \\
 \hline
-NFR-04 & 性能 & P1 & 非模型调用接口（认证、查询、聚合分析）在单用户正常操作下 P95 响应时间应低于 1 秒；大模型分类调用设有 60 秒超时保护（\texttt{model\_timeout\_seconds=60}）与最多 2 次自动重试；≤1000 笔交易的单批次文件解析阶段应在 10 秒内完成，进度通过轮询接口实时反映 \\
+NFR-04 & 性能 & P1 & 非模型调用接口（认证、查询、聚合分析）在单用户正常操作下 P95 响应时间应低于 1 秒；大模型分类调用设有 60 秒超时保护与最多 2 次自动重试；不超过 1000 笔交易的单批次文件解析阶段应在 10 秒内完成，并向用户持续反馈进度 \\
 \hline
 NFR-05 & 可部署性 & P0 & 支持本地开发模式、Docker Compose 部署与裸机部署三种方式 \\
 \hline
-NFR-06 & 可维护性 & P0 & 前后端分离；后端按 routes/services/models/schemas 分层组织 \\
+NFR-06 & 可维护性 & P0 & 前后端职责分离；后端按接口、业务、数据和基础设施层次组织 \\
 \hline
-NFR-07 & 可测试性 & P0 & 后端具备 pytest 自动化测试套件，前端通过 TypeScript 类型检查与生产构建验证 \\
+NFR-07 & 可测试性 & P0 & 后端具备自动化测试体系，前端通过类型检查、单元测试与生产构建验证 \\
 \hline
 NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部署组件预留扩展接口 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
+\input{chapters/02-quality-scenarios}
+
 \section{用户场景分析}
 
 \subsection{普通用户场景}
 
-普通用户的核心场景覆盖“导入—分类—校正—分析—报表”的完整链路：
+普通用户的核心场景覆盖“导入—分类—校正—分析—报表”的完整流程：
 
 \begin{enumerate}
   \item 用户注册账号并登录系统，进入应用主界面。
@@ -140,7 +144,7 @@ NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部
   \item 系统调用大模型对每条交易进行语义初分，记录分类来源、置信度与分类理由。
   \item 用户在交易列表中按日期、平台、分类、关键词筛选查看交易。
   \item 在分类校正工作台中，用户查看待校正交易队列，对低置信度或语义误判的分类进行人工修正。
-  \item 用户进入 Dashboard 查看收入支出概览、储蓄率、分类占比图与 Top 商户。
+  \item 用户进入财务看板查看收入支出概览、储蓄率、分类占比图与主要商户。
   \item 用户进入消费人格页面，查看基于交易数据计算的消费人格画像、财务健康评分，并可通过问卷进行自评对比。
   \item 用户进入报表中心，选择日期范围与导入文件，生成并下载 PDF 报表。
 \end{enumerate}
@@ -150,11 +154,11 @@ NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部
 家庭组织场景描述管理员创建家庭、管理成员并查看聚合分析的过程：
 
 \begin{enumerate}
-  \item 用户创建家庭组织，系统自动将创建者设为 owner 角色。
-  \item owner 或 admin 通过用户名搜索添加成员，并可提升普通成员为 admin。
+  \item 用户创建家庭组织，系统自动将创建者设为所有者。
+  \item 所有者或管理员通过用户名搜索添加成员，并可调整普通成员角色。
   \item 家庭成员进入组织页面查看家庭合计收入、支出、交易数与消费人格聚合雷达图。
-  \item owner 或 admin 可触发家庭范围内的重分类操作；普通 member 只能查看聚合结果。
-  \item 不传入 \texttt{organization\_id} 参数时，Dashboard、Personality 和 Reports 仍按个人账本模式工作，保持向后兼容。
+  \item 所有者或管理员可触发家庭范围内的重分类操作；普通成员只能查看聚合结果。
+  \item 未选择家庭视图时，财务看板、消费人格和报表仍按个人账本模式工作。
 \end{enumerate}
 
 \subsection{系统运维场景}
@@ -184,31 +188,20 @@ NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部
 \hline
 用户上传不支持的账单格式 & 导入失败并记录具体错误信息，页面提示用户重新上传 \\
 \hline
-重复导入同一笔交易 & 通过 \texttt{dedupe\_hash} 字段去重，避免重复记录入库 \\
+重复导入同一笔交易 & 根据交易特征生成稳定摘要并去重，避免重复保存 \\
 \hline
-模型供应商不可用 & 交易进入重试队列，后台串行重试；超时耗尽后标记为 retry\_failed \\
+模型服务不可用 & 交易进入重试队列，由后台任务处理器依次重试；达到上限后记录失败原因 \\
 \hline
-用户尝试访问他人报表或交易 & 后端按 \texttt{current\_user.id} 校验资源归属，拒绝非授权访问 \\
+用户尝试访问他人报表或交易 & 系统根据当前身份校验资源归属，拒绝非授权访问 \\
 \hline
 报表生成失败 & 记录任务状态与错误信息，用户可调整参数后重新触发生成 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{用例建模}
-
-系统用例图展示三类参与者（普通用户、家庭管理员、系统运维人员）与系统功能之间的关系。普通用户可操作认证、导入、查看交易、校正分类、管理自定义分类、查看 Dashboard、生成报表、查看消费人格等用例；家庭管理员额外可创建组织和管理成员；系统运维人员负责供应商配置与重试队列管理。导入账单用例包含大模型语义分类作为扩展关系。
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.92\textwidth]{用例图.png}
-  \caption{系统用例图}
-  \label{fig:usecase}
-\end{figure}
-
 \section{用例规约}
 
-以下对两个核心用例给出结构化用例说明，包含基本流程、替代流程与异常流程。
+前述模块用例图覆盖全部功能边界。以下选择“导入账单与语义分类”和“人工校正分类结果”两个核心用例给出结构化规约，包含基本流程、替代流程与异常流程。
 
 \subsection{UC-01：导入账单与语义分类}
 
@@ -227,22 +220,22 @@ NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部
 \hline
 \textbf{前置条件} & 用户已登录；待上传文件为微信或支付宝 CSV 格式 \\
 \hline
-\textbf{后置条件} & 交易记录入库完毕，语义初分完成，批次状态置为 \texttt{done} 或 \texttt{partial\_failed} \\
+\textbf{后置条件} & 交易记录保存完毕，语义初分完成，系统给出完成或部分失败的处理结果 \\
 \hline
 \textbf{基本流程} &
 1）用户拖拽或选择账单文件。\newline
-2）前端调用 \texttt{POST /api/imports} 上传文件内容。\newline
-3）系统创建 \texttt{ImportBatch}，将原始文件写入磁盘。\newline
-4）后台线程解析 CSV，将各平台格式转换为统一 \texttt{Transaction} 结构。\newline
-5）对每笔新交易计算 \texttt{dedupe\_hash}，跳过已存在的重复记录。\newline
-6）调用 \texttt{CompositeClassifier}（缓存→外部 API→本地模型→规则回退）进行语义分类，结果写入 \texttt{auto\_category\_id}、\texttt{auto\_confidence}、\texttt{auto\_reason}。\newline
-7）批次状态更新为 \texttt{done}，前端轮询后展示完成提示。\\
+2）系统接收文件并创建导入任务。\newline
+3）系统保存原始文件并识别账单来源。\newline
+4）系统解析账单，将不同平台格式转换为统一交易结构。\newline
+5）系统识别并跳过已存在的重复交易。\newline
+6）系统依次利用缓存、模型服务和规则后备方案进行语义分类，记录分类来源、置信度与理由。\newline
+7）系统更新导入进度，并向用户展示最终处理结果。\\
 \hline
-\textbf{替代流程 A} & 部分交易模型超时（超过 60 秒）：失败交易标记为 \texttt{retry\_queue}，其余交易正常入库，批次状态置为 \texttt{partial\_failed}。 \\
+\textbf{替代流程 A} & 部分交易的模型调用超过 60 秒：相关交易加入等待重试队列，其余交易正常保存，批次结果显示为部分失败。 \\
 \hline
-\textbf{替代流程 B} & 文件含已导入交易：\texttt{dedupe\_hash} 自动去重，跳过重复记录，批次仍正常完成。 \\
+\textbf{替代流程 B} & 文件包含已导入交易：系统依据交易特征自动去重，跳过重复记录，批次仍可正常完成。 \\
 \hline
-\textbf{异常流程} & 文件格式无法识别（非微信／支付宝 CSV）：文件状态标记为 \texttt{failed}，错误信息写入 \texttt{error\_message}，页面提示用户重新上传。 \\
+\textbf{异常流程} & 文件格式无法识别（非微信或支付宝支持格式）：系统终止该文件的处理并记录原因，页面提示用户重新上传。 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -262,19 +255,19 @@ NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部
 \hline
 \textbf{触发条件} & 用户进入分类校正工作台 \\
 \hline
-\textbf{前置条件} & 系统中存在 \texttt{needs\_review=true} 的交易记录 \\
+\textbf{前置条件} & 系统中存在需要人工复核的交易记录 \\
 \hline
-\textbf{后置条件} & 目标交易的 \texttt{final\_category\_id} 已更新，\texttt{needs\_review} 置为 \texttt{false}，校正结果实时反映在 Dashboard 及报表数据中 \\
+\textbf{后置条件} & 目标交易的最终分类已更新并退出待复核队列，校正结果反映在财务看板及报表数据中 \\
 \hline
 \textbf{基本流程} &
-1）前端加载待校正队列（\texttt{needs\_review=true}，按置信度升序排列）。\newline
+1）系统加载待校正交易，并按置信度从低到高排列。\newline
 2）用户选中一笔交易，右侧面板展示商户、金额、当前分类、置信度与模型推理理由。\newline
 3）用户从系统分类或自定义分类中选择正确类别，点击"确认校正"。\newline
-4）前端调用 \texttt{PATCH /api/transactions/\{id\}}，提交新的 \texttt{final\_category\_id}。\newline
-5）后端更新交易记录，将 \texttt{needs\_review} 置为 \texttt{false}。\newline
+4）系统提交用户选择的新分类。\newline
+5）系统更新交易记录并将其移出待复核队列。\newline
 6）前端从待校正队列移除该交易，自动加载下一笔。\\
 \hline
-\textbf{替代流程} & 用户认为当前分类正确：直接点击"确认当前分类"，后端同样将 \texttt{needs\_review} 置为 \texttt{false}，\texttt{final\_category\_id} 保留原 \texttt{auto\_category\_id}。 \\
+\textbf{替代流程} & 用户认为当前分类正确：直接确认模型建议，系统将该建议保存为最终分类并结束复核。 \\
 \hline
 \textbf{异常流程} & 所需自定义分类尚不存在：用户跳转至分类管理页面新增分类后，返回工作台重新操作。 \\
 \bottomrule
@@ -283,15 +276,17 @@ NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部
 
 \section{业务流程建模}
 
-核心业务活动图描述了从用户登录到报表生成的端到端流程。流程始于用户登录，接着上传账单文件，系统创建导入批次后进行解析和去重；成功解析的交易经过大模型语义初分，高置信度结果直接入库，低置信度交易进入人工复核队列；用户完成校正后，交易数据进入 Dashboard 聚合分析，随后流向消费人格与财务健康分析模块；在报表生成环节，系统根据是否选择家庭组织参数，分别生成个人 PDF 报表或家庭聚合 PDF 报表。
+核心业务活动图描述了从用户登录到报表生成的端到端流程。流程始于用户登录，接着上传账单文件，系统创建导入批次后进行解析和去重；成功解析的交易经过大模型语义初分，高置信度结果直接保存，低置信度交易进入人工复核队列；用户完成校正后，交易数据进入财务聚合分析，随后用于消费人格与财务健康分析；在报表生成环节，系统根据用户选择分别生成个人 PDF 报表或家庭聚合 PDF 报表。
 
-\begin{figure}[!htbp]
+\clearpage
+\begin{figure}[p]
   \centering
   \includegraphics[
-    width=0.58\textwidth,
-    height=0.47\textheight,
+    width=\textwidth,
+    height=0.88\textheight,
     keepaspectratio
   ]{核心业务活动图.png}
   \caption{核心业务活动图}
   \label{fig:activity}
 \end{figure}
+\clearpage

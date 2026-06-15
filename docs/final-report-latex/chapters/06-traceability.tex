@@ -1,0 +1,93 @@
+\section{需求—设计—测试追踪}
+
+表~\ref{tab:fr-traceability} 和表~\ref{tab:nfr-traceability} 将需求与设计模块、测试证据对应起来。“自动化通过”表示存在可重复执行的测试；“手工验收”表示通过第 7.4 节的用户流程检查；“设计目标”表示尚未完成专项测量，不能解释为已经达到。
+
+\begingroup
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{longtable}{@{}p{1.0cm} p{2.8cm} p{3.8cm} p{3.6cm} p{1.3cm}@{}}
+\caption{功能需求追踪矩阵}
+\label{tab:fr-traceability}\\
+\toprule
+\textbf{ID} & \textbf{设计/实现} & \textbf{测试证据} & \textbf{验收场景} & \textbf{状态} \\
+\midrule
+\endfirsthead
+\multicolumn{5}{c}{\small 表~\thetable\quad 功能需求追踪矩阵（续）} \\
+\toprule
+\textbf{ID} & \textbf{设计/实现} & \textbf{测试证据} & \textbf{验收场景} & \textbf{状态} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{5}{r}{\small 接下页} \\
+\endfoot
+\bottomrule
+\endlastfoot
+FR-01 & 身份认证与前端登录状态管理 & 注册、登录、凭证校验与页面访问控制测试 & 步骤 1 & 自动化通过 \\
+\hline
+FR-02 & 当前用户识别与资源归属过滤 & 交易、导入、报表越权测试；组织权限测试 & 步骤 1、5、9、12 & 自动化通过 \\
+\hline
+FR-03 & 账单导入、批次与文件管理 & 导入流程、批次进度和用户隔离测试 & 步骤 2、3 & 自动化通过 \\
+\hline
+FR-04 & 平台识别、账单解析与文本规范化 & 微信、支付宝样例及规范化稳定性测试 & 步骤 2、3 & 自动化通过 \\
+\hline
+FR-05 & 复合分类与分类历史 & 缓存、模型、规则降级和结果记录测试 & 步骤 6 & 自动化通过 \\
+\hline
+FR-06 & 交易查询、筛选与分页 & 条件过滤、分页、身份校验和数据隔离测试 & 步骤 5、6 & 自动化通过 \\
+\hline
+FR-07 & 人工分类与校正工作台 & 分类更新、复核状态和越权访问测试 & 步骤 7 & 自动化通过 \\
+\hline
+FR-08 & 系统分类与自定义分类管理 & 当前以页面操作和接口联调验证 & 步骤 8 & 手工验收 \\
+\hline
+FR-09 & 财务聚合分析与看板 & 日期、分类筛选及汇总指标测试 & 步骤 4 & 自动化通过 \\
+\hline
+FR-10 & 消费人格与问卷分析 & 人格维度、问卷偏差和边界条件测试 & 步骤 10、11 & 自动化通过 \\
+\hline
+FR-11 & 家庭组织与基于角色的权限控制 & 组织创建、成员管理和角色权限测试 & 步骤 12 & 自动化通过 \\
+\hline
+FR-12 & 成员 ID 范围解析、家庭聚合参数 & 组织聚合与个人模式兼容测试 & 步骤 13 & 自动化通过 \\
+\hline
+FR-13 & 报表构建、记录与下载 & 报表筛选、生成和跨用户下载保护测试 & 步骤 9 & 自动化通过 \\
+\hline
+FR-14 & 用户分类设置与可替换分类策略 & 分类策略测试、前端类型检查和设置页验收 & 步骤 14 & 自动化 + 验收 \\
+\hline
+FR-15 & 重试任务处理器与管理员恢复功能 & 重试状态、进度、失败恢复和超时测试 & 步骤 14 & 自动化通过 \\
+\end{longtable}
+\endgroup
+
+\begingroup
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{longtable}{@{}p{1.0cm} p{2.9cm} p{4.0cm} p{3.2cm} p{1.3cm}@{}}
+\caption{非功能需求追踪矩阵}
+\label{tab:nfr-traceability}\\
+\toprule
+\textbf{ID} & \textbf{设计机制} & \textbf{验证方式} & \textbf{当前结论} & \textbf{状态} \\
+\midrule
+\endfirsthead
+\multicolumn{5}{c}{\small 表~\thetable\quad 非功能需求追踪矩阵（续）} \\
+\toprule
+\textbf{ID} & \textbf{设计机制} & \textbf{验证方式} & \textbf{当前结论} & \textbf{状态} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{5}{r}{\small 接下页} \\
+\endfoot
+\bottomrule
+\endlastfoot
+NFR-01 & 密码哈希、JWT、RBAC、资源归属 & 安全、认证、交易与组织 API 测试 & 已覆盖身份与普通越权；上传限制和速率限制待补 & 部分验证 \\
+\hline
+NFR-02 & 用户 ID 隔离、家庭成员显式聚合 & 导入、交易、报表和组织隔离测试 & 核心私有资源具备隔离证据 & 自动化通过 \\
+\hline
+NFR-03 & 完整用户流程与个人/家庭双口径 & 14 步手工验收与组织兼容测试 & 主要任务可完成 & 自动化 + 验收 \\
+\hline
+NFR-04 & 超时、缓存、日期过滤和进度反馈 & 分类器超时测试；尚无标准化性能基准 & 超时机制已验证，P95 和千笔解析指标仍是目标 & 设计目标 \\
+\hline
+NFR-05 & 本地、Docker Compose、裸机文档 & 配置审查、前端构建、部署手册 & 具备三种运行说明；未执行持续部署测试 & 文档验证 \\
+\hline
+NFR-06 & 路由、服务、模型与 Schema 分层 & 代码走查、模块和接口文档 & 主要职责边界清晰 & 代码审查 \\
+\hline
+NFR-07 & 后端自动化测试、前端单元测试与类型检查 & 本章测试结果与生产构建验证 & 核心后端与前端基础能力具备回归测试 & 自动化通过 \\
+\hline
+NFR-08 & 可替换解析、分类、报表构建和异步任务边界 & 解析、分类和报表测试 & 主要变化点已有扩展边界，异步报表处理尚未完成 & 部分验证 \\
+\end{longtable}
+\endgroup

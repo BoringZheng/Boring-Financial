@@ -1,0 +1,68 @@
+@startuml
+!pragma layout smetana
+top to bottom direction
+skinparam backgroundColor #FFFFFF
+skinparam dpi 180
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #334155
+
+package "前端" #EFF6FF {
+  component "布局与导航层" as Layout
+  component "页面层\n10 个业务页面" as Pages
+  component "Pinia 状态管理层" as Store
+  component "通信层\nAxios + JWT" as Client
+  component "TypeScript 类型约束层" as Types
+  Layout --> Pages
+  Pages --> Store
+  Pages --> Client
+  Pages --> Types
+}
+
+package "后端接口层" #FFF7ED {
+  component "统一路由管理" as Router
+  component "认证 / 分类 / 导入\n交易 / 智能分类接口" as CoreRoutes
+  component "财务看板 / 消费人格\n家庭组织 / 报表 / 设置接口" as FeatureRoutes
+  Router --> CoreRoutes
+  Router --> FeatureRoutes
+}
+
+package "后端业务层" #F8FAFC {
+  component "导入与解析服务" as ImportServices
+  component "分类与重试服务" as ClassificationServices
+  component "聚合与画像服务" as AnalysisServices
+  component "家庭权限服务" as OrganizationServices
+  component "报表构建服务" as ReportServices
+}
+
+package "数据与基础设施层" #F0FDF4 {
+  component "Pydantic 数据契约" as Schemas
+  component "SQLAlchemy\n对象关系映射实体" as Models
+  component "数据库会话 / 安全机制\n系统配置 / 异步任务" as Infrastructure
+  database "PostgreSQL / SQLite" as DB
+  folder "文件存储\n上传文件 + PDF" as Storage
+  cloud "分类服务提供方" as Model
+}
+
+Client --> Router
+CoreRoutes --> ImportServices
+CoreRoutes --> ClassificationServices
+FeatureRoutes --> AnalysisServices
+FeatureRoutes --> OrganizationServices
+FeatureRoutes --> ReportServices
+CoreRoutes --> Schemas
+FeatureRoutes --> Schemas
+
+ImportServices --> Models
+ImportServices --> Storage
+ClassificationServices --> Models
+ClassificationServices --> Model
+AnalysisServices --> Models
+OrganizationServices --> Models
+ReportServices --> Models
+ReportServices --> Storage
+Infrastructure --> Models
+Models --> DB
+@enduml

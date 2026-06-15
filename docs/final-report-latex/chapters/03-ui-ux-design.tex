@@ -4,9 +4,9 @@
 
 系统 UI 设计随开发迭代同步演进，经历以下三个阶段。
 
-\textbf{第一阶段——场景驱动草图}：需求分析阶段，团队依据普通用户、家庭管理员、运维人员三类场景，推演各页面的核心信息与操作动线，确定整体布局框架：深色侧边栏承载全局导航，白色卡片区承载数据展示。各功能页面的布局模式在此阶段确定：Dashboard 采用摘要卡片组加图表区的双层结构；校正工作台采用左侧队列加右侧详情的双栏分割；交易列表采用顶部筛选栏加分页表格。
+\textbf{第一阶段——场景驱动草图}：需求分析阶段，团队依据普通用户、家庭管理员、运维人员三类场景，推演各页面的核心信息与操作动线，确定整体布局框架：深色侧边栏承载全局导航，白色卡片区承载数据展示。各功能页面的布局模式在此阶段确定：财务看板采用摘要卡片组加图表区的双层结构；校正工作台采用左侧队列加右侧详情的双栏分割；交易列表采用顶部筛选栏加分页表格。
 
-\textbf{第二阶段——设计系统建立}：首个开发迭代中，以 Dashboard 页面为标准件，确定色板、字号层级与间距规范，检验组件复用与色彩层级的一致性，形成贯穿全系统的设计语言（详见下节"设计系统"）。
+\textbf{第二阶段——设计系统建立}：首个开发迭代中，以财务看板页面为标准，确定色板、字号层级与间距规范，检验组件复用与色彩层级的一致性，形成贯穿全系统的设计语言（详见下节“设计系统”）。
 
 \textbf{第三阶段——联调反馈与细节调整}：前后端联调过程中，交互细节根据接口数据结构与实际操作反馈迭代调整。导入页面的进度轮询间隔与批次状态展示方式、校正工作台的双栏布局与队列排序逻辑、家庭组织页面的角色权限控件可见性，均在多轮联调中根据反馈完善，最终形成本章所展示的页面形态。
 
@@ -47,159 +47,145 @@
 
 \section{主要页面原型}
 
-系统共设计 10 个主要页面，本节逐一描述各页面的功能定位与关键交互。
+系统共设计 10 个主要页面。为避免本章成为逐页产品说明，以下按核心业务流程、分析协作和管理配置三类组合展示，并重点说明页面如何承接用户任务与后台能力。
 
-\subsection{登录与注册页面}
+\subsection{核心账单业务流程}
 
-登录与注册页面采用左右分栏布局：左侧为深色品牌展示区，包含应用名称与简短说明；右侧为白色表单卡片，包含用户名与密码输入框，以及登录与注册模式切换按钮。注册模式额外显示邮箱字段。验证成功后，系统存储 JWT Token 并跳转至 Dashboard。
-
-\begin{figure}[H]
-  \centering
-  \uiscreenshot{截图-登陆注册页.png}
-  \caption{登录与注册页面截图}
-  \label{fig:screenshot-login}
-\end{figure}
-
-\subsection{仪表盘页面}
-
-Dashboard 是系统的财务驾驶舱，顶部展示收入、支出、结余、储蓄率四张摘要卡片。中部为支出趋势折线图和分类占比饼图，分别使用 ECharts 渲染。右侧展示 Top 商户排行榜。页面数据通过 \texttt{/api/dashboard/summary} 接口聚合生成，用户可通过顶部日期筛选器切换统计周期。
+登录页完成身份建立；导入页提交账单文件并持续展示处理进度；交易页提供筛选与详情；校正工作台将分类理由、置信度和最终分类控件并置；财务看板展示校正后的统计结果。五个页面共同完成“认证→导入→查看→校正→分析”的主要任务。
 
 \begin{figure}[H]
+\centering
+\begin{minipage}[t]{0.48\textwidth}
   \centering
-  \uiscreenshot{截图-dashboard.png}
-  \caption{仪表盘页面截图}
-  \label{fig:screenshot-dashboard}
+  \includegraphics[width=\linewidth,height=0.19\textheight,keepaspectratio]{截图-登陆注册页.png}\\[-0.3em]
+  {\small 登录与注册}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth,height=0.19\textheight,keepaspectratio]{截图-导入账单.png}\\[-0.3em]
+  {\small 账单导入与批次进度}
+\end{minipage}
+
+\vspace{0.8em}
+\begin{minipage}[t]{0.31\textwidth}
+  \centering
+  \includegraphics[width=\linewidth,height=0.16\textheight,keepaspectratio]{截图-交易列表.png}\\[-0.3em]
+  {\small 交易筛选与详情}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.31\textwidth}
+  \centering
+  \includegraphics[width=\linewidth,height=0.16\textheight,keepaspectratio]{截图-分类矫正.png}\\[-0.3em]
+  {\small 分类校正工作台}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.31\textwidth}
+  \centering
+  \includegraphics[width=\linewidth,height=0.16\textheight,keepaspectratio]{截图-dashboard.png}\\[-0.3em]
+  {\small 财务看板}
+\end{minipage}
+\caption{核心账单业务流程页面概览}
+\label{fig:ui-core-flow}
 \end{figure}
 
-\clearpage
-\subsection{账单导入页面}
+\subsection{分析输出与家庭协作}
 
-账单导入页面提供拖拽上传区域，支持微信与支付宝 CSV 账单文件。上传成功后，页面展示最近导入记录列表，包含文件名、平台、状态与处理进度条，支持批量进度轮询。用户可点击导入记录查看详情，或删除历史导入批次。
+消费人格页将交易画像、财务健康评分和问卷偏差集中展示；家庭组织页根据所有者、管理员和普通成员的权限显示成员管理与聚合分析；报表中心允许用户按日期和上传文件生成 PDF，并在成功后提供下载入口。用户切换至家庭视图时，三类输出使用家庭成员交易的聚合口径。
 
 \begin{figure}[H]
+\centering
+\begin{minipage}[t]{0.32\textwidth}
   \centering
-  \uiscreenshot{截图-导入账单.png}
-  \caption{账单导入页面截图}
-  \label{fig:screenshot-import}
+  \includegraphics[width=\linewidth,height=0.19\textheight,keepaspectratio]{截图-消费人格.png}\\[-0.3em]
+  {\small 消费人格与问卷偏差}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.32\textwidth}
+  \centering
+  \includegraphics[width=\linewidth,height=0.19\textheight,keepaspectratio]{截图-家庭组织.png}\\[-0.3em]
+  {\small 家庭组织与聚合分析}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.32\textwidth}
+  \centering
+  \includegraphics[width=\linewidth,height=0.19\textheight,keepaspectratio]{截图-报表中心.png}\\[-0.3em]
+  {\small PDF 报表生成与下载}
+\end{minipage}
+\caption{分析输出与家庭协作页面概览}
+\label{fig:ui-analysis}
 \end{figure}
 
-\subsection{交易列表页面}
+\subsection{分类管理与系统设置}
 
-交易列表页面以筛选栏加分页表格的形式展示所有交易记录。筛选条件包括日期范围、平台（微信/支付宝）、分类、导入文件和关键词搜索。表格每行显示时间、商户、金额、分类与置信度。点击行可展开详情抽屉，展示分类来源、置信度、分类理由与原始交易备注。
+分类管理页区分系统分类与用户自定义分类，系统分类不可由普通用户禁用；系统设置页保存当前用户选择的分类服务、模型名称和低置信度阈值。管理员可使用独立的管理功能查询和处理重试队列，普通用户不能执行管理操作。
 
 \begin{figure}[H]
+\centering
+\begin{minipage}[t]{0.48\textwidth}
   \centering
-  \uiscreenshot{截图-交易列表.png}
-  \caption{交易列表页面截图}
-  \label{fig:screenshot-transactions}
-\end{figure}
-
-\clearpage
-\subsection{分类校正工作台}
-
-校正工作台采用左右分栏布局：左侧为待校正交易队列，按置信度从低到高排序，每项显示商户、金额与当前分类；右侧为当前选中交易的详细信息，包括模型分类建议（来源、置信度、推理理由），以及分类选择控件，允许用户选择新的系统分类或自定义分类并确认修正。确认后交易从队列中移除。
-
-\begin{figure}[H]
+  \includegraphics[width=\linewidth,height=0.22\textheight,keepaspectratio]{截图-分类管理.png}\\[-0.3em]
+  {\small 系统分类与自定义分类}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
   \centering
-  \uiscreenshot{截图-分类矫正.png}
-  \caption{分类校正工作台截图}
-  \label{fig:screenshot-review}
+  \includegraphics[width=\linewidth,height=0.22\textheight,keepaspectratio]{截图-系统设置.png}\\[-0.3em]
+  {\small 分类服务与阈值设置}
+\end{minipage}
+\caption{管理与配置页面概览}
+\label{fig:ui-management}
 \end{figure}
-
-\subsection{分类管理页面}
-
-分类管理页面展示系统预设分类与用户自定义分类。顶部为分类使用频率统计，按交易数量排序。中部为分类列表，系统分类标记为锁定不可删除，用户自定义分类支持新增、编辑与禁用操作。修改操作通过弹窗表单完成，实时生效。
-
-\begin{figure}[H]
-  \centering
-  \uiscreenshot{截图-分类管理.png}
-  \caption{分类管理页面截图}
-  \label{fig:screenshot-categories}
-\end{figure}
-
-\clearpage
-\subsection{消费人格页面}
-
-消费人格页面由三个区域组成：顶部为 16 型消费人格画像卡片，展示用户所属人格类型及简要描述；中部为四维雷达图（现时偏好、心理账户、炫耀性消费、开放性），展示各维度得分；底部为财务健康评分区域，展示储蓄率、收入稳定性、消费多样性、支出波动性和应急能力的子指标。页面同时提供问卷自评入口，用户可对比主观认知与交易数据画像的偏差。
-
-\begin{figure}[H]
-  \centering
-  \uiscreenshot{截图-消费人格.png}
-  \caption{消费人格页面截图}
-  \label{fig:screenshot-personality}
-\end{figure}
-
-\subsection{家庭组织页面}
-
-家庭组织页面在用户未加入任何组织时显示创建引导。已有组织时，页面展示三部分内容：左侧为成员列表，每行显示用户名、角色（owner/admin/member）与角色管理按钮；右上方为家庭财务概览卡片，展示组织合计收入、支出与交易数；右下方为家庭消费人格聚合雷达图，将所有成员交易数据按人格维度聚合展示。owner 和 admin 可见角色管理控件与重分类触发按钮。
-
-\begin{figure}[H]
-  \centering
-  \uiscreenshot{截图-家庭组织.png}
-  \caption{家庭组织页面截图}
-  \label{fig:screenshot-organization}
-\end{figure}
-
-\clearpage
-\subsection{报表中心页面}
-
-报表中心页面提供日期范围选择器与导入文件筛选器。用户设置条件后点击生成按钮，系统异步创建报表任务。生成完成后，页面展示报表摘要信息（覆盖时间段、交易数、分类分布），并提供 PDF 下载按钮。历史报表列表按生成时间倒序排列，支持重新下载。
-
-\begin{figure}[H]
-  \centering
-  \uiscreenshot{截图-报表中心.png}
-  \caption{报表中心页面截图}
-  \label{fig:screenshot-reports}
-\end{figure}
-
-\subsection{系统设置页面}
-
-系统设置页面向所有用户展示当前分类供应商名称、置信度阈值等配置信息。管理员用户额外可见重试队列控制区：包括当前队列状态（等待重试数、重试中数、已失败数），以及“一键重试历史超时”按钮。普通用户仅可见配置展示，管理操作控件隐藏。
-
-\begin{figure}[H]
-  \centering
-  \uiscreenshot{截图-系统设置.png}
-  \caption{系统设置页面截图}
-  \label{fig:screenshot-settings}
-\end{figure}
-
-\section{前端架构与组件职责}
-
-前端基于 Vue 3 + TypeScript + Element Plus + ECharts 技术栈，采用组件化分层架构。各核心模块的职责划分如表所示。
 
 \begin{table}[H]
 \centering
-\caption{前端核心组件与模块职责}
+\small
+\caption{页面、需求与后台能力对应关系}
+\label{tab:ui-api-trace}
+\begin{tabularx}{0.98\textwidth}{p{3cm} p{3.2cm} X}
+\toprule
+\textbf{页面组} & \textbf{对应需求} & \textbf{对应后台能力} \\
+\midrule
+核心账单业务流程 & FR-01 至 FR-07、FR-09 & 身份认证、账单导入、交易管理、财务聚合分析 \\
+\hline
+分析与家庭协作 & FR-10 至 FR-13 & 消费人格分析、家庭组织管理、报表生成 \\
+\hline
+管理与配置 & FR-08、FR-14、FR-15 & 分类管理、分类服务配置、失败任务恢复 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{前端功能层次与职责}
+
+前端基于 Vue 3、TypeScript、Element Plus 和 ECharts，采用组件化分层架构。各功能层次的职责划分如表所示。
+
+\begin{table}[H]
+\centering
+\caption{前端功能层次与职责}
 \label{tab:frontend-components}
 \begin{tabular}{p{4.5cm} p{9cm}}
 \toprule
-\textbf{模块/文件} & \textbf{职责} \\
+\textbf{功能层次} & \textbf{职责} \\
 \midrule
-\texttt{layouts/AppLayout.vue} & 整体布局外壳：深色侧边栏、顶部标题栏、用户信息区与主内容渲染区域 \\
+整体布局层 & 提供深色侧边栏、顶部标题栏、用户信息区与主内容区域，保持各页面结构一致 \\
 \hline
-\texttt{pages/} (10 个页面组件) & 各业务页面的视图逻辑与交互，对应登录、Dashboard、导入、交易、校正、分类、人格、组织、报表、设置 \\
+业务页面层 & 承载登录、财务看板、导入、交易、校正、分类、人格、组织、报表和设置等用户任务 \\
 \hline
-\texttt{stores/auth.ts} & 认证状态管理：用户名、Token 存取、登录状态持久化至 localStorage \\
+状态管理层 & 统一管理用户身份、当前组织等跨页面状态，并维持登录状态 \\
 \hline
-\texttt{api/client.ts} & Axios 实例封装：统一注入 Bearer Token、请求/响应拦截、错误处理 \\
+通信层 & 统一发送后台请求、附加身份凭证并处理常见错误，减少页面中的重复通信逻辑 \\
 \hline
-\texttt{router/index.ts} & 前端路由定义：页面懒加载、路由守卫（未登录重定向至登录页） \\
+导航层 & 定义页面访问关系与访问控制，未登录用户访问受保护页面时返回登录页 \\
 \hline
-\texttt{types/} & TypeScript 接口定义：交易、分类、导入批次、报表、组织成员等数据结构的类型约束 \\
+类型约束层 & 约束交易、分类、导入批次、报表和组织成员等数据结构，减少前后台数据理解不一致 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-前端通过 Axios 拦截器在每次请求中自动附加 Authorization 头部，确保所有 API 调用均携带有效 JWT Token。路由守卫在页面切换时检查认证状态，未登录用户自动重定向至登录页。页面组件通过 Pinia Store 获取全局状态（认证信息、当前组织），本地状态（筛选条件、分页）在组件内部管理。
+前端通信层在每次受保护请求中自动附加身份凭证。导航层在页面切换时检查认证状态，未登录用户自动返回登录页。页面通过统一状态管理机制获取认证信息和当前组织，筛选条件、分页等局部状态则由具体页面维护。
 
 \section{用户体验目标}
 
 系统用户体验设计围绕以下四个核心目标展开：
 
-\textbf{减少用户操作步骤}：账单导入采用拖拽上传模式，一次上传即可触发解析→去重→分类的全自动链路。Dashboard 与人格页面的数据通过后端聚合计算，用户无需手动维护分类映射表或公式。批量校正工作台允许用户在单一页面完成所有低置信度交易的复核，无需逐条跳转。
+\textbf{减少用户操作步骤}：账单导入采用拖拽上传模式，一次上传即可触发解析、去重和分类。财务看板与人格页面的数据由后台统一计算，用户无需手动维护分类映射表或公式。批量校正工作台允许用户在单一页面完成所有低置信度交易的复核，无需逐条跳转。
 
 \textbf{分类结果可解释、可校正}：模型分类结果不仅给出类别，还提供置信度与人类可读的推理理由。校正工作台将模型建议与修改控件并置，用户可在了解 AI 推理过程后做出校正决策。校正结果即时生效，无需额外保存步骤。
 
-\textbf{校正数据全链路贯通}：人工校正后的交易分类应实时反映在 Dashboard 聚合、消费人格计算和 PDF 报表中。系统通过统一数据源（transactions 表）确保各分析模块使用一致的最新分类结果，避免出现“已校正但图表未更新”的不一致情况。
+\textbf{校正结果贯通各项分析}：人工校正后的交易分类应及时反映在财务看板、消费人格计算和 PDF 报表中。系统以统一交易数据为依据，确保各分析模块使用一致的最新分类结果，避免出现“已校正但图表未更新”的不一致情况。
 
-\textbf{个人模式不受家庭功能影响}：家庭组织功能采用显式 opt-in 设计——用户需主动创建或加入组织，并在 Dashboard 和报表页面通过 \texttt{organization\_id} 参数显式切换至家庭视图。不传入该参数时，所有页面保持原有个人模式行为，确保现有用户的体验不受影响。
+\textbf{个人模式不受家庭功能影响}：家庭组织功能采用主动选择方式，用户需主动创建或加入组织，并在财务看板和报表页面切换至家庭视图。未选择家庭视图时，所有页面保持个人账本口径，确保原有使用方式不受影响。

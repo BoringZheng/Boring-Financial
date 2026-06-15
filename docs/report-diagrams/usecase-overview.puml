@@ -1,0 +1,42 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam dpi 180
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam defaultFontName "Microsoft YaHei"
+skinparam defaultTextAlignment center
+skinparam ArrowColor #334155
+skinparam ActorBorderColor #334155
+skinparam ActorFontColor #0F172A
+skinparam usecase {
+  BackgroundColor #F8FAFC
+  BorderColor #2563EB
+  FontColor #0F172A
+}
+
+actor "普通用户" as User
+actor "家庭管理员" as OrgAdmin
+actor "系统运维人员" as Ops
+OrgAdmin --|> User
+
+rectangle "Boring Financial" #FFFFFF {
+  usecase "用户认证与\n数据隔离" as Auth
+  usecase "账单导入与解析" as Import
+  usecase "智能分类与重试" as Classification
+  usecase "交易、人工校正\n与分类管理" as Transaction
+  usecase "财务看板、消费人格\n与报表" as Analysis
+  usecase "家庭组织与\n聚合分析" as Organization
+  usecase "系统配置与运维" as Operation
+}
+
+User --> Auth
+User --> Import
+User --> Classification
+User --> Transaction
+User --> Analysis
+User --> Organization
+OrgAdmin --> Organization
+Ops --> Operation
+@enduml

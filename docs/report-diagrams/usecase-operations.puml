@@ -1,0 +1,38 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam dpi 180
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #334155
+skinparam ActorFontColor #0F172A
+skinparam usecase {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+}
+
+actor "普通用户" as User
+actor "系统运维人员" as Ops
+
+rectangle "系统配置与运维" {
+  usecase "查看个人分类设置" as Settings
+  usecase "修改分类服务\n与阈值" as UpdateSettings
+  usecase "查看健康状态" as Health
+  usecase "查询重试队列状态" as RetryStatus
+  usecase "重新处理失败交易" as RetryFailed
+  usecase "查看应用日志" as Logs
+  usecase "备份数据库与文件" as Backup
+  usecase "检查磁盘与服务进程" as Inspect
+}
+
+User --> Settings
+User --> UpdateSettings
+Ops --> Health
+Ops --> RetryStatus
+Ops --> RetryFailed
+Ops --> Logs
+Ops --> Backup
+Ops --> Inspect
+@enduml

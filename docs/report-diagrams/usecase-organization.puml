@@ -1,0 +1,49 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam dpi 180
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #334155
+skinparam ActorFontColor #0F172A
+skinparam usecase {
+  BackgroundColor #FDF2F8
+  BorderColor #DB2777
+  FontColor #0F172A
+}
+
+actor "普通用户" as User
+actor "家庭成员" as Member
+actor "家庭管理员" as Admin
+Member --|> User
+Admin --|> Member
+
+rectangle "家庭组织与聚合分析" {
+  usecase "创建家庭组织" as Create
+  usecase "查看已加入组织" as List
+  usecase "查看成员列表" as Members
+  usecase "添加成员" as Add
+  usecase "调整成员角色" as Role
+  usecase "移除成员" as Remove
+  usecase "查看家庭财务看板" as Dashboard
+  usecase "查看家庭消费人格" as Personality
+  usecase "生成家庭报表" as Report
+  usecase "校验组织成员身份" as Verify
+  usecase "确定组织成员范围" as UserIds
+}
+
+User --> Create
+User --> List
+Member --> Members
+Member --> Dashboard
+Member --> Personality
+Member --> Report
+Admin --> Add
+Admin --> Role
+Admin --> Remove
+Dashboard ..> Verify : <<include>>
+Personality ..> Verify : <<include>>
+Report ..> Verify : <<include>>
+Verify ..> UserIds : <<include>>
+@enduml

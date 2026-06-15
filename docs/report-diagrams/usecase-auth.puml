@@ -1,0 +1,37 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam dpi 180
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #334155
+skinparam ActorFontColor #0F172A
+skinparam usecase {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  FontColor #0F172A
+}
+
+actor "访客" as Guest
+actor "普通用户" as User
+
+rectangle "用户认证与数据隔离" {
+  usecase "注册账号" as Register
+  usecase "登录系统" as Login
+  usecase "获取当前用户" as CurrentUser
+  usecase "访问个人资源" as PersonalResource
+  usecase "校验 JWT" as VerifyJWT
+  usecase "校验资源归属" as VerifyOwner
+  usecase "登出" as Logout
+}
+
+Guest --> Register
+Guest --> Login
+User --> CurrentUser
+User --> PersonalResource
+User --> Logout
+CurrentUser ..> VerifyJWT : <<include>>
+PersonalResource ..> VerifyJWT : <<include>>
+PersonalResource ..> VerifyOwner : <<include>>
+@enduml

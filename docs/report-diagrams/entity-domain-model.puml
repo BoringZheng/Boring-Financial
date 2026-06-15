@@ -1,0 +1,165 @@
+@startuml
+!pragma layout smetana
+top to bottom direction
+
+skinparam backgroundColor #FFFFFF
+skinparam dpi 180
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #334155
+skinparam ArrowFontColor #334155
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam nodesep 34
+skinparam ranksep 38
+skinparam packageStyle rectangle
+skinparam package {
+  BackgroundColor #F8FAFC
+  BorderColor #94A3B8
+  FontColor #0F172A
+}
+skinparam class {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  FontColor #0F172A
+  HeaderBackgroundColor #E2E8F0
+}
+
+hide methods
+hide circle
+
+package "用户与组织" #EFF6FF {
+  class User {
+    id: int <<PK>>
+    username: string
+    email: string?
+    is_active: bool
+    is_admin: bool
+  }
+
+  class Organization {
+    id: int <<PK>>
+    created_by_user_id: int <<FK>>
+    name: string
+    plan: string?
+    subscription_status: string?
+  }
+
+  class OrganizationMember {
+    id: int <<PK>>
+    organization_id: int <<FK>>
+    user_id: int <<FK>>
+    role: string
+  }
+
+  User "1" -- "0..*" Organization : 创建 >
+  User "1" -- "0..*" OrganizationMember : 加入 >
+  Organization "1" -- "0..*" OrganizationMember : 包含 >
+}
+
+package "账单导入与交易" #F0FDF4 {
+  class ImportBatch {
+    id: int <<PK>>
+    user_id: int <<FK>>
+    status: string
+    total_count: int
+    processed_count: int
+  }
+
+  class UploadedFile {
+    id: int <<PK>>
+    batch_id: int <<FK>>
+    filename: string
+    platform: string?
+    status: string
+  }
+
+  class Transaction {
+    id: int <<PK>>
+    user_id: int <<FK>>
+    batch_id: int <<FK>>
+    uploaded_file_id: int? <<FK>>
+    occurred_at: datetime
+    amount: decimal
+    dedupe_hash: string
+    auto_category_id: int? <<FK>>
+    final_category_id: int? <<FK>>
+    needs_review: bool
+  }
+
+  ImportBatch "1" -- "1..*" UploadedFile : 包含 >
+  ImportBatch "1" -- "0..*" Transaction : 导入 >
+  UploadedFile "0..1" -- "0..*" Transaction : 来源 >
+}
+
+package "分类体系" #FAF5FF {
+  class Category {
+    id: int <<PK>>
+    user_id: int? <<FK>>
+    parent_id: int? <<FK>>
+    name: string
+    is_system: bool
+    is_active: bool
+  }
+
+  class CategoryRule {
+    id: int <<PK>>
+    user_id: int? <<FK>>
+    category_id: int <<FK>>
+    priority: int
+    merchant_pattern: string?
+    keyword_pattern: string?
+  }
+
+  class ClassificationResult {
+    id: int <<PK>>
+    transaction_id: int <<FK>>
+    category_id: int? <<FK>>
+    confidence: decimal?
+    provider: string
+    created_at: datetime
+  }
+
+  class ClassificationCache {
+    id: int <<PK>>
+    user_id: int <<FK>>
+    category_id: int? <<FK>>
+    provider: string
+    text_hash: string
+    confidence: decimal?
+  }
+
+  Category "0..1" -- "0..*" Category : 父分类 >
+  Category "1" -- "0..*" CategoryRule : 应用规则 >
+  Transaction "0..*" -down- "0..1" Category : 自动/最终分类 >
+  Transaction "1" -down- "0..*" ClassificationResult : 产生 >
+  Category "0..1" -- "0..*" ClassificationResult : 分类结果 >
+  Category "0..1" -- "0..*" ClassificationCache : 缓存结果 >
+}
+
+package "报表生成" #FFF7ED {
+  class ReportJob {
+    id: int <<PK>>
+    user_id: int <<FK>>
+    status: string
+    date_from: datetime?
+    date_to: datetime?
+  }
+
+  class GeneratedReport {
+    id: int <<PK>>
+    user_id: int <<FK>>
+    job_id: int <<FK>>
+    title: string
+    file_path: string
+    created_at: datetime
+  }
+
+  ReportJob "1" -- "0..1" GeneratedReport : 生成 >
+}
+
+User -[hidden]right- ImportBatch
+ImportBatch -[hidden]right- Category
+OrganizationMember -[hidden]down- ReportJob
+
+@enduml

@@ -1,0 +1,37 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam dpi 180
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #334155
+skinparam ActorFontColor #0F172A
+skinparam usecase {
+  BackgroundColor #ECFDF5
+  BorderColor #059669
+  FontColor #0F172A
+}
+
+actor "普通用户" as User
+
+rectangle "账单导入与解析" {
+  usecase "上传账单文件" as Upload
+  usecase "查询导入进度" as Progress
+  usecase "查看上传文件" as Files
+  usecase "删除导入批次" as Delete
+  usecase "识别账单平台" as Detect
+  usecase "解析并规范化交易" as Parse
+  usecase "计算去重哈希" as Dedupe
+  usecase "记录批次状态" as BatchState
+}
+
+User --> Upload
+User --> Progress
+User --> Files
+User --> Delete
+Upload ..> Detect : <<include>>
+Upload ..> Parse : <<include>>
+Parse ..> Dedupe : <<include>>
+Upload ..> BatchState : <<include>>
+@enduml

@@ -1,0 +1,46 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam dpi 180
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #334155
+skinparam ActorFontColor #0F172A
+skinparam usecase {
+  BackgroundColor #FFF7ED
+  BorderColor #EA580C
+  FontColor #0F172A
+}
+
+actor "普通用户" as User
+actor "家庭管理员" as OrgAdmin
+actor "系统运维人员" as Ops
+actor "分类服务提供方" as Provider
+
+rectangle "智能分类与重试" {
+  usecase "自动分类交易" as AutoClassify
+  usecase "查看分类理由\n与置信度" as Explain
+  usecase "重新分类个人交易" as Reclassify
+  usecase "重新分类家庭交易" as OrgReclassify
+  usecase "查询分类缓存" as Cache
+  usecase "调用模型分类服务" as Model
+  usecase "采用规则分类后备方案" as RuleFallback
+  usecase "将超时请求加入等待队列" as Queue
+  usecase "查看重试状态" as RetryStatus
+  usecase "重新处理失败交易" as RetryAll
+}
+
+User --> AutoClassify
+User --> Explain
+User --> Reclassify
+OrgAdmin --> OrgReclassify
+Ops --> RetryStatus
+Ops --> RetryAll
+Provider --> Model
+
+AutoClassify ..> Cache : <<include>>
+AutoClassify ..> Model : <<extend>>
+AutoClassify ..> RuleFallback : <<extend>>
+Model ..> Queue : 超时
+@enduml

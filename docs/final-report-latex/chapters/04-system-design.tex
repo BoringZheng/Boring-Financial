@@ -1,24 +1,67 @@
 \chapter{系统设计}
 
-本章阐述\projectname 的架构设计，涵盖总体架构、技术选型、前后端分层设计、数据隔离策略、部署方案以及安全机制。
+本章阐述\projectname 的架构设计，涵盖架构驱动因素、总体运行时结构、技术选型、模块职责、数据隔离、部署方案以及安全机制。
+
+\section{架构驱动因素与设计原则}
+
+架构设计并非从技术栈出发，而是由第 3 章的功能需求和质量场景共同驱动。系统最重要的架构目标如下：
+
+\begin{enumerate}
+  \item \textbf{财务数据默认隔离}：认证后的所有私有资源访问必须绑定当前用户；家庭聚合需要显式组织参数与成员身份校验。
+  \item \textbf{分类结果可解释、可修正}：自动分类必须保留分类来源、置信度和理由，人工确定的最终分类不得被后续自动分类覆盖。
+  \item \textbf{外部模型故障不阻塞核心业务流程}：导入、交易查看和人工校正不能依赖模型服务持续在线；超时请求进入统一重试机制。
+  \item \textbf{变化点可替换}：新增账单平台或分类服务提供方时，应尽量限制修改范围，不影响交易、财务看板和报表能力。
+  \item \textbf{轻量运行与工程化部署并存}：开发或演示环境可使用 SQLite 和应用内任务，容器化环境可使用 PostgreSQL、Redis 和独立后台任务处理器。
+\end{enumerate}
+
+据此采用模块化、分层、接口契约优先、用户数据默认隔离、外部能力可降级和部署能力可裁剪六项设计原则。系统属于\textbf{前后端分离的模块化单体应用}：后端业务模块运行在同一个 FastAPI 应用中，并通过接口层、业务层、数据层和基础设施层控制耦合；它不是按业务域独立部署的微服务系统。
 
 \section{总体架构}
 
-系统采用四层架构，自上而下分为展示层、网关层、服务层与数据/外部服务层，各层通过 HTTP 协议通信，职责边界清晰。
+系统运行时结构分为展示层、接入层、应用层、异步处理层以及数据与外部服务层。
 
 \begin{enumerate}
   \item \textbf{展示层}：Vue 3 + Element Plus + ECharts 构建的单页应用，运行于用户浏览器，负责全部用户交互与数据可视化。
-  \item \textbf{网关层}：生产环境使用 Nginx 对外提供静态文件服务，并通过反向代理将 \texttt{/api} 请求转发至后端。开发环境使用 Vite Proxy 实现同源转发。
-  \item \textbf{服务层}：FastAPI 构建的 RESTful API 服务，包含认证、导入、交易、分类、Dashboard 聚合、消费人格、家庭组织及 PDF 报表等业务模块。异步任务通过 Celery Worker 消费，外部模型调用通过 Retry Queue Worker 后台线程串行管理。
-  \item \textbf{数据与外部服务层}：PostgreSQL（生产）/ SQLite（轻量部署）作为主数据库，Redis 作为 Celery 消息代理。外部服务包括 OpenAI-compatible API 与本地模型服务（vLLM），由 Retry Queue Worker 统一调度。
+  \item \textbf{接入层}：生产环境使用 Nginx 提供静态文件服务与反向代理，开发环境由前端开发服务器完成同源转发。
+  \item \textbf{应用层}：FastAPI 接口层处理 HTTP 请求、身份校验和数据转换，业务层实现导入、分类、聚合、组织和报表逻辑。
+  \item \textbf{异步处理层}：重试任务处理器随应用启动，依次处理外部模型请求；Celery 提供可选的独立任务执行能力，用于需要与请求过程分离的导入、重分类或报表任务。
+  \item \textbf{数据与外部服务层}：PostgreSQL（生产）或 SQLite（轻量部署）存储业务数据，Redis 支持可选的任务队列，文件存储保存上传账单与 PDF；分类服务可以是外部兼容接口或本地模型服务。
 \end{enumerate}
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.92\textwidth]{系统总体架构图.png}
-  \caption{系统总体架构图}
+  \includegraphics[width=0.88\textwidth,height=0.78\textheight,keepaspectratio]{architecture-overview.png}
+  \caption{系统总体运行时架构图}
   \label{fig:architecture}
 \end{figure}
+
+图~\ref{fig:architecture} 中，同步请求沿“浏览器→前端→接入层→FastAPI→数据库或文件存储”流转；外部模型分类采用“业务服务记录待处理交易→后台任务处理器取出任务→调用分类服务→保存结果”的独立处理流程。该图只描述运行时构件，模块依赖与物理部署分别由组件图、包图和部署图表达。
+
+\begin{table}[H]
+\centering
+\small
+\caption{关键架构决策}
+\label{tab:architecture-decisions}
+\begin{tabularx}{0.98\textwidth}{p{2.7cm} p{3.5cm} X p{3.2cm}}
+\toprule
+\textbf{决策} & \textbf{需求来源} & \textbf{实现及理由} & \textbf{代价与限制} \\
+\midrule
+前后端分离的模块化单体 & 多页面交互、可维护性与轻量部署 & Vue 与 FastAPI 通过表述性状态转移应用程序接口（REST API）通信；后端按业务模块和分层目录组织，部署单元保持简单 & 不能像微服务一样按业务模块独立扩缩容 \\
+\hline
+统一交易结构 & FR-03、FR-04、可扩展性场景 & 将平台差异封装在解析模块中，对下游提供统一交易数据 & 新平台仍需补充列映射和测试样例 \\
+\hline
+复合分类与统一输出 & FR-05、FR-14 & 缓存、模型和规则采用统一结果结构，其他模块不需要了解分类服务差异 & 分类过程和状态比单一规则复杂 \\
+\hline
+后台重试机制 & FR-15、模型超时场景 & 数据库记录等待任务，后台处理器依次执行并采用指数退避，避免短时间大量重复请求 & 单实例处理能力有限，多实例运行时需要进一步协调 \\
+\hline
+自动/最终双分类字段 & FR-07、结果可追溯性 & 自动建议与人工决定分开保存，统计优先使用最终分类 & 查询和更新需统一处理分类优先级 \\
+\hline
+个人归属 + 查询时家庭聚合 & FR-11、FR-12、数据隔离 & 交易始终归属个人，家庭视图通过成员 ID 集合聚合 & 聚合查询比直接绑定组织更复杂 \\
+\hline
+报表构建与任务记录 & FR-13 & 构建器模式分离数据准备与页面渲染，并记录报表处理状态 & 当前仍采用同步生成，大报表可能占用请求处理资源 \\
+\bottomrule
+\end{tabularx}
+\end{table}
 
 \section{技术选型}
 
@@ -32,28 +75,28 @@
     \toprule
     \textbf{技术} & \textbf{用途} & \textbf{选型依据} \\
     \midrule
-    FastAPI（Python） & 后端 API 框架 & 原生异步支持，自动生成 OpenAPI 文档（/docs、/redoc），Pydantic 请求/响应验证 \\
+    FastAPI（Python） & 后端 API 框架 & 原生异步支持，可自动生成 OpenAPI 文档，并通过数据模型完成请求与响应验证 \\
     \hline
     Vue 3 + TypeScript & 前端框架 & 组合式 API 支持高复用的逻辑组织，TypeScript 编译期类型检查降低运行时错误 \\
     \hline
     Element Plus & UI 组件库 & 成熟的 Vue 3 组件生态，提供表格、表单、弹窗、导航等企业级组件 \\
     \hline
-    ECharts & 数据可视化 & 支持雷达图、柱状图、折线图、饼图等，满足 Dashboard 与人格分析的可视化需求 \\
+    ECharts & 数据可视化 & 支持雷达图、柱状图、折线图、饼图等，满足财务看板与人格分析的可视化需求 \\
     \hline
     SQLAlchemy 2.x & ORM 框架 & Data Mapper 模式解耦领域逻辑与持久化，支持 SQLite/PostgreSQL 双数据库切换 \\
     \hline
-    Celery + Redis & 异步任务队列 & Celery 提供生产级任务调度与重试，Redis 作为轻量消息代理兼缓存 \\
+    Celery + Redis & 可选异步任务队列 & 已定义导入、重分类和报表任务；容器化部署可启动独立后台任务处理器，Redis 提供消息传递与结果存储 \\
     \hline
     fpdf2 & PDF 生成 & 轻量级 Python PDF 库，无外部依赖，支持 Unicode 中文字体加载 \\
     \hline
-    Docker Compose & 容器编排 & 一键启动多服务栈，确保开发/测试/生产环境一致性 \\
+    Docker Compose & 多服务部署 & 统一启动多个运行组件，降低不同环境之间的配置差异 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \section{前端架构}
 
-前端代码按职责划分为四层：视图层由 10 个页面组件构成，对应登录、Dashboard、导入、交易列表、校正工作台、分类管理、消费人格、家庭组织、报表中心和系统设置；状态层通过 Pinia Store 管理认证状态与 Token 持久化；通信层基于 Axios 封装 API 客户端，通过请求拦截器自动注入 Bearer Token；路由层使用 Vue Router 配置页面懒加载与导航守卫，未登录用户自动重定向至登录页。类型定义层为全部业务模型提供 TypeScript 接口约束。
+前端按职责划分为视图、状态、通信、导航和类型约束五个层次。视图层由 10 个页面构成，对应登录、财务看板、导入、交易列表、校正工作台、分类管理、消费人格、家庭组织、报表中心和系统设置；状态层管理认证状态与跨页面信息；通信层统一处理后台请求和身份凭证；导航层控制页面访问与按需加载；类型约束层统一描述前后台交换的数据结构。
 
 前端视觉设计规范以深色导航（\texttt{\#06233D}）、品牌色（\texttt{\#00A884}）与浅灰页面背景（\texttt{\#F5F7FA}）构成统一视觉语言，详见第 4 章。
 
@@ -73,17 +116,61 @@
 
 \section{后端架构}
 
-后端按分层架构组织为四层。路由层（\texttt{api/}）通过 \texttt{router.py} 统一注册 10 个路由模块，覆盖认证、分类、导入、交易、分类校正、Dashboard、人格分析、家庭组织和报表生成。服务层（\texttt{services/}）承载全部业务逻辑：\texttt{imports.py} 管理导入批次与文件处理，\texttt{parsers.py} 实现多平台账单解析与规范化，\texttt{classifiers.py} 以复合分类链路编排规则、缓存与模型调用，\texttt{retry\_queue.py} 提供后台串行重试池，\texttt{analytics.py} 与 \texttt{personality.py} 负责聚合计算与人格分析，\texttt{organizations.py} 实现家庭组织 CRUD 与角色校验，\texttt{reports.py} 以 Builder 模式构建 PDF 报表。数据层（\texttt{models/entities.py}）定义 12 个 SQLAlchemy ORM 实体，\texttt{schemas/} 按业务域拆分的 Pydantic DTO 负责请求校验与响应序列化。基础设施层（\texttt{db/}、\texttt{core/}、\texttt{tasks/}）提供数据库会话管理、JWT 安全模块、配置加载与 Celery 异步任务定义。
+后端按分层架构组织为四层。接口层统一接收请求，完成身份校验、输入验证和响应组织；业务层承担导入、解析、分类、财务分析、消费人格、家庭组织和报表生成等业务规则；数据层使用对象关系映射（ORM）描述 12 个领域实体，并负责持久化访问；基础设施层提供数据库会话、安全配置、文件存储和可选的异步任务能力。各层通过明确的数据契约交互，使业务规则不依赖具体的网络协议或数据库实现。
+
+\section{核心模块职责}
+
+\begin{longtable}{p{2.7cm} p{3.5cm} p{4.0cm} p{3.5cm}}
+\caption{核心业务模块划分}
+\label{tab:core-modules}\\
+\toprule
+\textbf{模块} & \textbf{划分理由} & \textbf{主要职责} & \textbf{核心数据对象} \\
+\midrule
+\endfirsthead
+\multicolumn{4}{c}{\small 表~\thetable\quad 核心业务模块划分（续）} \\
+\toprule
+\textbf{模块} & \textbf{划分理由} & \textbf{主要职责} & \textbf{核心数据对象} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{4}{r}{\small 接下页} \\
+\endfoot
+\bottomrule
+\endlastfoot
+认证与授权 & 身份和资源归属是全部业务操作的共同前置条件 & 注册登录、身份凭证校验、当前用户识别、管理员权限 & 用户、身份凭证 \\
+\hline
+导入与解析 & 平台文件差异变化频繁，应与下游业务隔离 & 保存文件、维护批次、平台识别、解析、规范化与去重 & 导入批次、上传文件、标准交易 \\
+\hline
+分类与重试 & 分类服务可能不可用且需要替换，需要统一协调 & 缓存查询、模型与规则分类、分类历史、重试状态与失败恢复 & 分类结果、分类缓存、重试状态 \\
+\hline
+交易与分类管理 & 交易查询与人工最终分类属于用户控制边界 & 分页筛选、详情、人工校正、系统与自定义分类维护 & 交易、分类 \\
+\hline
+分析与人格 & 多个页面共享相同交易聚合口径 & 财务指标、趋势、消费人格、问卷偏差与财务健康 & 聚合指标、人格画像 \\
+\hline
+家庭组织 & 组织权限与个人归属规则独立于普通交易管理 & 组织和成员管理、基于角色的访问控制（RBAC）、成员范围确定 & 组织、组织成员、成员角色 \\
+\hline
+报表 & PDF 构建包含独立的数据准备和渲染步骤 & 创建任务记录、准备报表数据、生成并下载 PDF & 报表任务、报表文件 \\
+\bottomrule
+\end{longtable}
+
+图~\ref{fig:billing-data-flow} 将导入、分类、人工校正与后续分析串联为一条数据主线。系统分别保存自动建议和人工确定的最终分类；财务看板、消费人格和报表统一优先使用最终分类，避免不同功能采用不同统计口径。
+
+\begin{figure}[p]
+  \centering
+  \includegraphics[width=\textwidth,height=0.92\textheight,keepaspectratio]{billing-data-flow.png}
+  \caption{账单处理核心数据流图}
+  \label{fig:billing-data-flow}
+\end{figure}
 
 \section{数据隔离策略}
 
 系统通过以下机制保障多用户数据隔离与家庭组织聚合访问：
 
 \begin{enumerate}
-  \item \textbf{个人资源归属}：所有用户私有资源（交易、导入批次、上传文件、分类缓存、报表等）通过 \texttt{user\_id} 外键归属。系统分类的 \texttt{user\_id} 为 NULL，用户自定义分类的 \texttt{user\_id} 指向创建者。
-  \item \textbf{查询过滤}：业务接口通过 Bearer Token 提取当前用户身份，查询时强制附加 \texttt{WHERE user\_id = current\_user.id} 条件。
-  \item \textbf{家庭聚合模式}：家庭组织不改变交易归属。用户选择家庭视图时，前端传入可选 \texttt{organization\_id}。后端先通过 \texttt{OrganizationService} 校验成员身份，再收集组织内全部成员 \texttt{user\_id} 列表，传入 Dashboard、Personality 或 Reports 服务实现跨成员数据聚合。
-  \item \textbf{默认模式}：\texttt{organization\_id} 为可选参数，不传入时各接口按个人账本口径返回数据，保持向后兼容。
+  \item \textbf{个人资源归属}：交易、导入批次、上传文件、分类缓存和报表等私有资源均记录所属用户；系统分类与用户自定义分类采用不同的归属规则。
+  \item \textbf{访问范围过滤}：系统根据身份凭证识别当前用户，并在每次私有资源访问时同时校验资源归属，避免仅凭资源编号访问他人数据。
+  \item \textbf{家庭聚合模式}：家庭组织不改变交易归属。用户选择家庭视图时，系统先校验组织成员身份，再将可访问范围扩展为组织内成员的数据集合。
+  \item \textbf{默认模式}：未选择家庭视图时，各项分析均按个人账本口径返回数据，保持个人功能的独立性。
 \end{enumerate}
 
 \section{部署架构}
@@ -91,11 +178,11 @@
 系统支持两种部署模式以适应不同规模的运行环境：
 
 \begin{description}
-  \item[轻量本地部署] 使用 SQLite 作为数据库，\texttt{TASK\_ALWAYS\_EAGER = true} 使 Celery 任务在当前进程同步执行，Retry Queue Worker 在后台线程运行。前端通过 Vite 开发服务器或构建后的静态文件直接访问。
-  \item[生产环境部署] Docker Compose 编排多容器服务栈：PostgreSQL 数据库、Redis 消息代理、Nginx 反向代理 + 静态文件服务、FastAPI/Uvicorn（监听 \texttt{127.0.0.1:8000}）、Celery Worker、Retry Queue Worker 后台线程。外部模型服务作为独立外部依赖。
+  \item[轻量本地部署] 使用 SQLite 作为数据库；导入与重试任务由应用内后台处理器执行，适合开发、演示和低负载环境。
+  \item[Docker Compose 部署] PostgreSQL、Redis、FastAPI、前端静态站点、Nginx、独立任务处理器和可选本地模型服务分别运行，适合需要稳定数据服务和任务隔离的环境。
 \end{description}
 
-通信链路为：用户浏览器 → Nginx（静态资源直接返回，API 请求反向代理至 FastAPI）→ FastAPI 与 PostgreSQL、Redis、Retry Queue Worker 通过内部网络通信。上传文件与 PDF 报表存储于 \texttt{storage/} 目录。
+通信过程为：用户浏览器访问 Nginx，静态资源由其直接返回，业务请求转发至 FastAPI，再由应用访问数据库和文件存储。独立任务处理器可通过 Redis 接收异步任务；重试任务处理器从数据库读取等待处理的交易并调用分类服务。上传文件与 PDF 报表统一保存于文件存储区域。
 
 \begin{figure}[H]
   \centering
@@ -109,18 +196,21 @@
 
 系统的安全设计覆盖认证、授权、数据隔离、注入防护与隐私保护五个层面。
 
+认证与授权能力作为接口层的统一前置检查：系统先验证用户身份，再根据业务操作检查资源归属或管理员权限。该设计将安全规则集中管理，使认证策略的变化尽量不影响具体业务逻辑。
+
 \begingroup
-\small
+\footnotesize
+\renewcommand{\arraystretch}{1.18}
 \begin{longtable}{@{}p{2.8cm} p{3.8cm} p{3.4cm} p{3.4cm}@{}}
   \caption{安全机制汇总}
   \label{tab:security}\\
     \toprule
-    \textbf{安全风险} & \textbf{应对措施} & \textbf{实现位置} & \textbf{说明} \\
+    \textbf{安全风险} & \textbf{应对措施} & \textbf{适用层次} & \textbf{说明} \\
     \midrule
     \endfirsthead
     \multicolumn{4}{c}{\small 表~\thetable\quad 安全机制汇总（续）} \\
     \toprule
-    \textbf{安全风险} & \textbf{应对措施} & \textbf{实现位置} & \textbf{说明} \\
+    \textbf{安全风险} & \textbf{应对措施} & \textbf{适用层次} & \textbf{说明} \\
     \midrule
     \endhead
     \midrule
@@ -128,20 +218,18 @@
     \endfoot
     \bottomrule
     \endlastfoot
-    身份伪造 & 密码哈希（passlib pbkdf2\_sha256），JWT 双令牌（access + refresh） & \texttt{core/security.py} & 密码不存明文；access token 短期有效 \\
+    身份伪造 & 密码摘要存储与 JSON Web Token（JWT）双凭证机制 & 认证层 & 密码不存明文；访问凭证具有较短有效期 \\
     \hline
-    未授权访问 & Bearer Token 强制验证用户身份 & \texttt{api/dependencies.py} & FastAPI Depends 注入，每条请求自动解码 JWT \\
+    未授权访问 & 受保护操作必须验证用户身份 & 接口层 & 每次请求均校验身份凭证及有效期 \\
     \hline
-    跨用户数据泄露 & 私有资源查询强制附加 user\_id 过滤 & 各 API 路由及服务层 & SQLAlchemy ORM 参数化查询自动转义 \\
+    跨用户数据泄露 & 私有资源访问同时校验当前用户与资源归属 & 业务层与数据层 & 即使资源编号有效，也不能访问其他用户的数据 \\
     \hline
-    组织越权操作 & RBAC 角色模型（owner/admin/member） & \texttt{services/organizations.py} & owner 可管理成员与角色，member 仅可查看 \\
+    组织越权操作 & 基于角色的访问控制 & 组织管理模块 & 所有者可管理成员与角色，普通成员仅可查看授权数据 \\
     \hline
-    SQL 注入 & SQLAlchemy ORM 参数化查询 & \texttt{models/entities.py} & 不存在字符串拼接 SQL 的场景 \\
+    SQL 注入 & 对象关系映射与参数化查询 & 数据访问层 & 业务查询不直接拼接 SQL 字符串 \\
     \hline
-    恶意文件上传 & 文件大小限制、扩展名白名单（CSV/XLSX） & \texttt{routes\_imports.py} & 后端验证文件类型 \\
+    恶意文件上传 & 清理文件名并仅交由受支持的账单解析器处理 & 导入模块 & 当前尚未实现文件大小、内容类型和扩展名的完整前置校验，列为后续加固项 \\
     \hline
-    模型隐私 & 商户名称与商品摘要可能被发送至外部 API & \texttt{services/classifiers.py} & 已识别为风险点；缓解措施含本地模型选项 \\
+    模型隐私 & 商户名称与商品摘要可能被发送至外部服务 & 分类模块 & 已识别为风险点；可通过本地模型选项减少外部传输 \\
 \end{longtable}
 \endgroup
-
-安全模块通过 FastAPI 的 \texttt{Depends} 机制将认证逻辑与业务代码解耦：\texttt{get\_current\_user} 从请求头提取并验证 JWT，\texttt{require\_admin} 在此基础上进一步校验管理员身份。此设计使安全策略变更不影响业务逻辑。

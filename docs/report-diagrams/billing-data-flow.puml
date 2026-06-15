@@ -1,0 +1,60 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam dpi 180
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #334155
+skinparam activity {
+  BackgroundColor #F8FAFC
+  BorderColor #2563EB
+  FontColor #0F172A
+  DiamondBackgroundColor #FFF7ED
+  DiamondBorderColor #EA580C
+}
+
+start
+:上传微信或支付宝账单;
+:创建导入批次并保存原始文件;
+:识别账单平台;
+:按平台格式解析为统一交易结构;
+:规范化交易文本;
+:生成用于去重的稳定摘要;
+
+if (是否重复交易?) then (是)
+  :跳过重复记录;
+else (否)
+  :保存标准化交易;
+  :采用复合分类机制;
+
+  if (缓存命中?) then (是)
+    :使用缓存分类结果;
+  else (否)
+    if (需要外部模型?) then (是)
+      :加入等待队列;
+      :后台任务处理器依次调用分类服务;
+      if (调用成功?) then (是)
+        :保存模型分类结果;
+      else (否)
+        :按退避策略重试或记录失败;
+      endif
+    else (否)
+      :采用规则分类后备方案;
+    endif
+  endif
+
+  :记录自动分类、置信度、理由与分类历史;
+  if (低置信度或用户发现误判?) then (是)
+    :进入人工校正工作台;
+    :保存人工确认的最终分类;
+  endif
+endif
+
+fork
+  :财务看板聚合;
+fork again
+  :消费人格与财务健康分析;
+fork again
+  :PDF 报表生成;
+end fork
+stop
+@enduml
