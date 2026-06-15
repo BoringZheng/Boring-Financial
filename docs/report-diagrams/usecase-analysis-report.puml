@@ -1,0 +1,44 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam dpi 180
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #334155
+skinparam ActorFontColor #0F172A
+skinparam usecase {
+  BackgroundColor #F0FDFA
+  BorderColor #0F766E
+  FontColor #0F172A
+}
+
+actor "普通用户" as User
+actor "家庭成员" as Member
+
+rectangle "财务看板、消费人格与报表" {
+  usecase "查看收支摘要" as Summary
+  usecase "查看分类分布\n与 Top 商户" as Distribution
+  usecase "按日期/文件筛选" as Filter
+  usecase "查看消费人格画像" as Personality
+  usecase "完成自评问卷" as Quiz
+  usecase "查看画像偏差" as Bias
+  usecase "生成 PDF 报表" as Report
+  usecase "下载 PDF 报表" as Download
+  usecase "选择个人或家庭口径" as Scope
+}
+
+User --> Summary
+User --> Distribution
+User --> Personality
+User --> Quiz
+User --> Report
+User --> Download
+Member --> Scope
+Summary ..> Filter : <<extend>>
+Distribution ..> Filter : <<extend>>
+Quiz ..> Bias : <<include>>
+Summary ..> Scope : <<extend>>
+Personality ..> Scope : <<extend>>
+Report ..> Scope : <<extend>>
+@enduml

@@ -1,0 +1,58 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam dpi 180
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #334155
+
+actor "用户" as User
+
+node "Docker Compose 部署环境" #F8FAFC {
+  node "Nginx 容器" as Nginx {
+    artifact "反向代理配置" as NginxConfig
+  }
+
+  node "前端容器" as Frontend {
+    artifact "Vue 静态资源" as Static
+  }
+
+  node "后端容器" as Backend {
+    component "FastAPI / Uvicorn" as API
+    component "重试队列处理器\n应用内后台线程" as Retry
+    API -- Retry
+  }
+
+  node "后台任务容器" as Worker {
+    component "Celery 后台任务处理器\n可选异步任务" as Celery
+  }
+
+  database "PostgreSQL 容器" as PostgreSQL
+  database "Redis 容器\n任务消息与结果支持" as Redis
+  folder "文件存储卷\n上传文件 + 报表" as Storage
+  node "本地模型服务容器\n模拟服务 / vLLM" as LocalModel
+}
+
+cloud "外部兼容分类接口" as ExternalModel
+
+User --> Nginx : HTTP / HTTPS
+Nginx --> Frontend : 静态资源
+Nginx --> API : 业务请求
+API --> PostgreSQL : SQL
+API --> Storage : 文件读写
+Retry --> PostgreSQL : 读取待重试交易\n写回分类结果
+Retry --> LocalModel : HTTP
+Retry --> ExternalModel : HTTPS
+Celery --> Redis : 任务消息
+Celery --> PostgreSQL : 任务数据
+Celery --> Storage : 导入 / 报表文件
+Celery --> LocalModel : 可选分类任务
+
+note bottom of Backend
+轻量本地模式：
+Vite + FastAPI + SQLite
+导入线程与重试队列处理器在应用进程内运行
+Celery 可采用同步执行模式
+end note
+@enduml

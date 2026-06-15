@@ -1,0 +1,225 @@
+\section{模块化功能需求与用例}
+
+为避免单张系统用例图包含过多连线，本报告先以图~\ref{fig:usecase-overview} 展示三类参与者与七个功能模块的关系，再分别展开模块内部用例。总览图用于确定系统边界，小图用于说明具体操作与权限差异。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.78\textwidth]{usecase-overview.png}
+  \caption{系统模块级用例总览}
+  \label{fig:usecase-overview}
+\end{figure}
+
+\subsection{用户认证与数据隔离}
+
+\textbf{业务规则}：注册用户名与邮箱必须唯一；密码只保存不可逆摘要；除注册、登录和健康检查外，业务操作均要求有效身份凭证；用户私有资源必须同时满足身份认证与资源归属校验。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.72\textwidth]{usecase-auth.png}
+  \caption{用户认证与数据隔离模块用例图}
+  \label{fig:usecase-auth}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\caption{用户认证与数据隔离模块用例说明}
+\label{tab:usecase-auth}
+\begin{tabularx}{0.96\textwidth}{p{2.2cm} p{3.4cm} X}
+\toprule
+\textbf{角色} & \textbf{用例} & \textbf{功能说明} \\
+\midrule
+访客 & 注册、登录 & 创建账号或验证凭据，成功后获得访问凭证与用户信息。 \\
+\hline
+普通用户 & 获取当前用户、登出 & 查询当前登录身份；登出时清除本地身份凭证。 \\
+\hline
+普通用户 & 访问个人资源 & 系统先验证 JWT 身份凭证，再根据资源归属限制查询、更新和下载范围。 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{账单导入与解析}
+
+\textbf{业务规则}：上传文件归当前用户所有；系统识别微信或支付宝格式后转换为统一交易结构；每笔交易根据规范化信息生成稳定摘要；同一用户重复导入相同交易时跳过重复记录；批次状态记录整体处理进度。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.90\textwidth]{usecase-import.png}
+  \caption{账单导入与解析模块用例图}
+  \label{fig:usecase-import}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\caption{账单导入与解析模块用例说明}
+\label{tab:usecase-import}
+\begin{tabularx}{0.96\textwidth}{p{2.2cm} p{3.4cm} X}
+\toprule
+\textbf{角色} & \textbf{用例} & \textbf{功能说明} \\
+\midrule
+普通用户 & 上传账单文件 & 选择并上传一个或多个文件，系统创建导入批次并保存原始文件。 \\
+\hline
+普通用户 & 查询导入进度与文件 & 查看批次状态、处理计数、进度百分比、平台识别结果和错误信息。 \\
+\hline
+普通用户 & 删除导入批次 & 删除本人批次以及关联的上传文件、交易和分类结果；不能删除他人的批次。 \\
+\hline
+系统 & 识别、解析、规范化与去重 & 根据账单平台选择相应解析方式，统一交易信息并生成用于去重的稳定摘要。 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{智能分类与重试}
+
+\textbf{业务规则}：分类结果必须记录来源、置信度和理由；复合分类机制依次利用分类缓存、模型服务与规则后备方案；需要外部模型处理的交易先加入等待队列，由后台任务处理器依次调用；达到重试上限后停止自动尝试，不直接混入人工复核队列。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.94\textwidth]{usecase-classification.png}
+  \caption{智能分类与重试模块用例图}
+  \label{fig:usecase-classification}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\caption{智能分类与重试模块用例说明}
+\label{tab:usecase-classification}
+\begin{tabularx}{0.96\textwidth}{p{2.2cm} p{3.6cm} X}
+\toprule
+\textbf{角色} & \textbf{用例} & \textbf{功能说明} \\
+\midrule
+普通用户 & 自动分类、查看解释 & 导入后获得自动分类建议，并可查看分类来源、理由与置信度。 \\
+\hline
+普通用户 & 重新分类个人交易 & 对本人指定交易重新执行分类，可选择当前配置的分类服务。 \\
+\hline
+家庭管理员 & 重新分类家庭交易 & 校验所有者或管理员权限后，对组织成员范围内的交易触发重分类。 \\
+\hline
+系统运维人员 & 查看重试状态、恢复失败任务 & 查询等待、失败和批次进度；将历史外部服务失败交易重新加入等待队列。 \\
+\hline
+模型服务 & 返回语义分类 & 外部或本地兼容接口返回分类结果；超时请求由重试机制处理。 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{交易、人工校正与分类管理}
+
+\textbf{业务规则}：交易查询只返回当前用户可访问的数据；分类展示优先采用人工确认结果，尚未确认时使用系统自动分类；人工确认后不再标记为待复核；系统分类可查看但不可被用户禁用，用户可管理自己的自定义分类。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.80\textwidth]{usecase-transactions.png}
+  \caption{交易、人工校正与分类管理模块用例图}
+  \label{fig:usecase-transactions}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\caption{交易、人工校正与分类管理模块用例说明}
+\label{tab:usecase-transactions}
+\begin{tabularx}{0.96\textwidth}{p{2.2cm} p{3.6cm} X}
+\toprule
+\textbf{角色} & \textbf{用例} & \textbf{功能说明} \\
+\midrule
+普通用户 & 查看、筛选交易 & 按日期、平台、分类、上传文件、关键词和待复核状态分页查询本人交易。 \\
+\hline
+普通用户 & 查看交易详情 & 查看原始交易信息、自动分类来源、置信度、理由和最终分类。 \\
+\hline
+普通用户 & 确认或修改分类 & 在校正工作台确认当前建议，或写入新的最终分类并移出待复核队列。 \\
+\hline
+普通用户 & 管理自定义分类 & 创建、编辑或禁用本人分类，供筛选和人工校正使用。 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{财务看板、消费人格与报表}
+
+\textbf{业务规则}：财务看板、消费人格和报表使用同一交易数据口径，人工最终分类优先于自动分类；查询可按日期、上传文件和可选的家庭组织限定范围；当前报表采用同步方式生成 PDF，并记录处理状态。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.82\textwidth]{usecase-analysis-report.png}
+  \caption{财务看板、消费人格与报表模块用例图}
+  \label{fig:usecase-analysis-report}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\caption{财务看板、消费人格与报表模块用例说明}
+\label{tab:usecase-analysis-report}
+\begin{tabularx}{0.96\textwidth}{p{2.2cm} p{3.7cm} X}
+\toprule
+\textbf{角色} & \textbf{用例} & \textbf{功能说明} \\
+\midrule
+普通用户 & 查看财务看板 & 获取收入、支出、结余、储蓄率、分类分布、趋势和主要商户。 \\
+\hline
+普通用户 & 查看消费人格与完成问卷 & 生成交易画像、财务健康评分，并比较问卷自评与数据画像的差异。 \\
+\hline
+普通用户 & 生成并下载 PDF & 按日期与上传文件生成本人报表；完成后根据报表编号下载文件。 \\
+\hline
+家庭成员 & 选择家庭口径 & 选择家庭组织后，以上分析改为组织成员交易的聚合口径。 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{家庭组织与聚合分析}
+
+\textbf{业务规则}：创建者自动成为所有者；所有者和管理员可管理成员，普通成员只查看聚合结果；家庭组织不改变交易原有的个人归属，聚合时先校验成员身份，再确定组织成员的数据范围。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.94\textwidth]{usecase-organization.png}
+  \caption{家庭组织与聚合分析模块用例图}
+  \label{fig:usecase-organization}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\caption{家庭组织与聚合分析模块用例说明}
+\label{tab:usecase-organization}
+\begin{tabularx}{0.96\textwidth}{p{2.2cm} p{3.8cm} X}
+\toprule
+\textbf{角色} & \textbf{用例} & \textbf{功能说明} \\
+\midrule
+普通用户 & 创建或查看组织 & 创建家庭组织，或查询本人已加入组织及对应角色。 \\
+\hline
+家庭成员 & 查看成员与聚合分析 & 查看成员列表、家庭财务看板、家庭消费人格并生成家庭报表。 \\
+\hline
+家庭管理员 & 添加、调整或移除成员 & 所有者和管理员根据角色规则维护成员；非授权操作将被拒绝。 \\
+\hline
+系统 & 组织范围解析 & 校验当前用户属于目标组织，并将全部成员 ID 传入分析与报表服务。 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{系统配置与运维}
+
+\textbf{业务规则}：用户可以查看和修改本人可配置的分类服务与阈值；重试队列管理功能要求管理员身份；健康检查无需登录；日志、备份、磁盘和进程检查通过部署环境完成，不由普通业务页面代替。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.44\textwidth]{usecase-operations.png}
+  \caption{系统配置与运维模块用例图}
+  \label{fig:usecase-operations}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\caption{系统配置与运维模块用例说明}
+\label{tab:usecase-operations}
+\begin{tabularx}{0.96\textwidth}{p{2.2cm} p{3.8cm} X}
+\toprule
+\textbf{角色} & \textbf{用例} & \textbf{功能说明} \\
+\midrule
+普通用户 & 查看或修改分类设置 & 查询当前分类服务、模型和阈值设置，并保存本人可修改项。 \\
+\hline
+系统运维人员 & 健康检查与队列管理 & 检查应用运行状态，并通过管理员功能查看或重新处理失败分类。 \\
+\hline
+系统运维人员 & 日志、备份与资源检查 & 查看 Uvicorn/systemd/Docker 日志，备份数据库与文件，检查磁盘和进程状态。 \\
+\bottomrule
+\end{tabularx}
+\end{table}

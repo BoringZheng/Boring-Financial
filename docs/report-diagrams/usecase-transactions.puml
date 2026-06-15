@@ -1,0 +1,29 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam dpi 180
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #334155
+skinparam ActorFontColor #0F172A
+skinparam usecase {
+  BackgroundColor #F5F3FF
+  BorderColor #7C3AED
+  FontColor #0F172A
+}
+
+actor "普通用户" as User
+
+rectangle "交易、人工校正与分类管理" {
+  usecase "查询交易\n（分页、筛选、详情）" as Browse
+  usecase "查看待复核交易" as ReviewQueue
+  usecase "确认或修改\n最终分类" as Correct
+  usecase "管理自定义分类\n（查看、新增、编辑、禁用）" as ManageCategory
+}
+
+User --> Browse
+User --> ReviewQueue
+User --> Correct
+User --> ManageCategory
+@enduml

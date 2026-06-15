@@ -1,50 +1,77 @@
 \chapter{运行与维护}
 
-本章阐述系统的运行环境配置、性能管理策略、可靠性保障机制以及日常运维检查要点。
+本章从运行保障角度说明系统所需环境、性能管理、可靠性机制和运维检查要求。文中将当前已经具备的能力与后续规划区分开来，不把建议采用的工具描述为现有部署事实。
 
 \section{运行环境}
 
-系统的运行时组件栈自上而下由以下部分构成：
+系统运行环境由以下部分组成：
 
 \begin{description}
-  \item[浏览器端] 用户通过现代浏览器（Chrome/Firefox/Edge/Safari 最新两个主要版本）访问 Vue 3 构建的单页应用。前端仅需静态文件托管，无服务端渲染（SSR）需求。
-  \item[Nginx] 生产环境反向代理与静态文件服务。静态资源（HTML/CSS/JS/字体/图片）由 Nginx 直接返回，API 请求通过 \texttt{proxy\_pass} 转发至后端 Uvicorn 进程。建议配置 gzip 压缩（\texttt{application/javascript}、\texttt{text/css}）、合理的缓存头（静态资源 \texttt{Cache-Control: max-age=31536000}，含 hash 的文件名天然支持缓存失效）以及 HTTPS 终端（通过 Let's Encrypt 等证书）。
-  \item[FastAPI / Uvicorn] 后端应用进程，监听 \texttt{127.0.0.1:8000}（不直接暴露于公网）。Uvicorn 的 worker 数量根据 CPU 核心数设置（建议 \texttt{workers = CPU\_CORES * 2 + 1}），生产环境可通过 systemd 或 Docker 管理进程生命周期。
-  \item[PostgreSQL / SQLite] 主数据库。生产环境推荐 PostgreSQL 14+，轻量部署或开发环境可使用 SQLite（文件级数据库，无需独立进程）。
-  \item[Redis] Celery 消息代理与结果后端。轻量部署模式下（\texttt{TASK\_ALWAYS\_EAGER = true}）可省略。
-  \item[Retry Queue Worker] 后台线程，随 FastAPI 应用进程生命周期管理。负责按 \texttt{updated\_at} 顺序串行消费待重试的外部模型分类请求。
-  \item[Local Model Service / vLLM] 可选的本地大模型推理服务，通过 OpenAI-compatible API 接口提供服务，推荐部署于独立 GPU 服务器或同一主机的独立进程中。
-  \item[OpenAI-compatible API] 外部大模型服务，通过 HTTPS 调用。支持任何兼容 OpenAI Chat Completions 接口的服务（如 DeepSeek、通义千问、Moonshot 等）。
+  \item[浏览器端] 用户通过主流现代浏览器访问 Vue 3 单页应用。前端以静态资源形式部署，不依赖服务端页面渲染。
+  \item[接入服务] Nginx 提供静态文件服务与反向代理，并可统一配置传输加密、资源压缩和缓存策略。
+  \item[后端应用] FastAPI 与 Uvicorn 承担身份校验、业务处理、数据访问和后台任务管理，可由系统服务或容器平台维护进程生命周期。
+  \item[数据存储] 生产环境采用 PostgreSQL，轻量部署与开发环境可采用 SQLite。两种方案共享相同的领域模型，但适用的数据规模和并发能力不同。
+  \item[任务支持] Redis 与 Celery 为可选的独立任务处理提供消息传递和结果存储；轻量环境可使用应用内任务处理方式。
+  \item[分类服务] 系统既可调用外部兼容模型服务，也可连接独立部署的本地模型服务。模型服务不可用时，规则分类仍可作为后备方案。
+  \item[文件存储] 上传账单与生成报表分别保存于受控文件区域，并按照用户归属实施访问限制。
 \end{description}
-
-文件存储方面，用户上传的账单原始文件存放于 \texttt{uploads/} 目录（按用户 ID 创建子目录），生成的 PDF 报表存放于 \texttt{reports/} 目录。建议定期清理超过 90 天的上传文件以控制磁盘占用。
 
 \section{性能管理}
 
-下表汇总了各核心组件的已知性能瓶颈、当前缓解措施及未来优化方向：
+表~\ref{tab:performance} 汇总主要性能影响因素、当前措施和后续改进方向。当前版本尚未形成标准化压力测试结果，因此表中改进目标不能解释为已经达到的性能结论。
 
 \begin{table}[H]
   \centering
   \small
   \caption{性能管理汇总}
   \label{tab:performance}
-  \begin{tabular}{@{}p{2.2cm} p{2.8cm} p{3.8cm} p{4.0cm}@{}}
+  \begin{tabular}{@{}p{2.2cm} p{3.0cm} p{3.8cm} p{3.8cm}@{}}
     \toprule
-    \textbf{组件} & \textbf{瓶颈描述} & \textbf{当前缓解措施} & \textbf{未来优化方向} \\
+    \textbf{功能} & \textbf{主要影响因素} & \textbf{当前措施} & \textbf{改进方向} \\
     \midrule
-    账单导入解析 & 解析为 I/O 密集型操作（读取 CSV/XLSX），单文件可含数千行 & 按文件逐个处理，定时提交避免长事务；跳行试探控制扫描上限 & 大文件异步处理，Celery Worker 并行解析 \\
+    账单导入解析 & 文件读取、格式识别和大量交易转换 & 按文件处理并分阶段提交，限制无效表头扫描范围 & 将大文件交由独立任务处理器并建立千笔交易基准 \\
     \hline
-    模型语义分类 & 外部 API 延迟（200--2000ms/次）为主要瓶颈 & 统一重试池串行化外部调用；ClassificationCache 缓存避免重复请求 & 引入语义相似度缓存；支持批量分类接口减少网络往返 \\
+    模型语义分类 & 网络延迟、模型推理时间和服务配额 & 采用超时控制、失败重试、分类缓存和规则后备方案 & 建立分类延迟基准，研究批量分类与相似交易复用 \\
     \hline
-    Dashboard 聚合 & 需扫描用户全部交易记录用于分类分布与趋势计算 & 使用 \texttt{in\_()} 过滤、索引覆盖；限定日期范围减少扫描量 & 引入物化视图或预聚合表，定时刷新统计 \\
+    财务聚合分析 & 长日期范围内需要扫描和汇总较多交易 & 使用用户范围、日期和分类条件缩小查询数据量 & 引入预聚合数据或物化视图，减少重复计算 \\
     \hline
-    消费人格计算 & Shannon 指数与余弦相似度涉及全量交易扫描 & 当前规模下（单用户数千笔）耗时百毫秒级，可接受 & 引入增量计算，新交易更新统计量而非全量扫描 \\
+    消费人格计算 & 多项指标需要基于历史交易重新计算 & 按日期与用户范围筛选，避免无关数据参与计算 & 采用增量统计，在新增交易时更新中间结果 \\
     \hline
-    PDF 报表生成 & fpdf2 单线程，报表渲染为 CPU 绑定操作 & 典型报表（20--50 页）生成秒级，可接受；异步任务避免阻塞 HTTP & 超大型报表分页并发生成后合并 \\
+    PDF 报表生成 & 当前为单请求内顺序生成，多页文档耗时较长 & 数据准备与页面渲染分离，并记录报表任务状态 & 接入异步任务处理，补充状态查询、失败反馈与重试 \\
     \hline
-    前端加载性能 & Element Plus + ECharts 合计超过 500KB（未压缩） & 生产构建启用 tree-shaking 与 gzip & 路由级代码分割，按页面懒加载组件库图表 \\
+    前端加载 & 组件库和图表库使公共资源包较大 & 生产构建启用压缩与按页面加载 & 进一步拆分图表与组件资源，降低首次加载体积 \\
     \bottomrule
   \end{tabular}
+\end{table}
+
+\section{运维能力现状}
+
+表~\ref{tab:ops-capabilities} 将当前能力、已知不足和改进方向对应起来。
+
+\begin{table}[H]
+\centering
+\small
+\caption{运维能力现状与改进}
+\label{tab:ops-capabilities}
+\begin{tabularx}{0.98\textwidth}{p{2.2cm} p{4.1cm} p{3.2cm} X}
+\toprule
+\textbf{能力} & \textbf{当前方案} & \textbf{已知不足} & \textbf{改进方向} \\
+\midrule
+健康检查 & 可判断后端应用是否存活 & 尚未同时检查数据库、缓存、磁盘和模型服务 & 增加依赖就绪检查，分别报告关键组件状态 \\
+\hline
+日志 & 应用、系统服务和容器均能输出运行日志 & 缺少统一结构、集中检索和保留策略 & 采用结构化日志并接入集中管理平台 \\
+\hline
+重试任务监控 & 管理员可查看等待、失败、分类来源和重试次数分布 & 无主动告警，依赖人工查看 & 对持续积压、最老任务年龄和失败增长设置告警 \\
+\hline
+备份恢复 & 数据库与业务文件可以人工备份 & 未自动调度，也没有恢复演练记录 & 建立定期备份、产物校验和恢复演练制度 \\
+\hline
+进程恢复 & 容器或系统服务可在进程退出后重新启动 & 只能识别进程退出，不能发现逻辑卡死 & 结合健康检查触发恢复并记录故障原因 \\
+\hline
+资源监控 & 可临时查看处理器、内存和磁盘占用 & 无历史趋势和阈值告警 & 接入统一指标平台并建立容量阈值 \\
+\hline
+密钥管理 & 数据库凭据、身份密钥和模型密钥通过部署环境注入 & 缺少轮换记录和专用密钥服务 & 建立密钥轮换流程，生产环境采用受控密钥管理 \\
+\bottomrule
+\end{tabularx}
 \end{table}
 
 \section{可靠性保障}
@@ -52,52 +79,45 @@
 系统通过以下五项机制保障数据处理的可靠性：
 
 \begin{enumerate}
-  \item \textbf{去重哈希（dedupe\_hash）}。每笔交易入库前，由 \texttt{TransactionNormalizer} 对平台、时间、金额（保留两位小数）、商户（NFKC 归一化后）、商品（NFKC 归一化后）五个字段拼接后计算 SHA-256 哈希。\texttt{transactions} 表的 \texttt{(user\_id, dedupe\_hash)} 联合唯一约束在数据库层面阻止重复插入。同一文件多次导入时，重复交易自动跳过，避免数据膨胀。
-  \item \textbf{统一重试池}。外部大模型 API 调用不直接由业务请求线程执行。\texttt{CompositeClassifier} 将需外部分类的交易标记为 \texttt{auto\_provider = "retry\_queue"} 后立即返回，由后台 \texttt{RetryQueueWorker} 线程按 \texttt{updated\_at} 升序串行取出一条交易调用外部 API。重试采用指数退避策略：每次超时后 \texttt{api\_retry\_count} 递增，等待间隔按 $\text{base\_delay} \times 2^{\text{retry\_count}}$ 增长（上限 300 秒）。达到 \texttt{RETRY\_QUEUE\_MAX\_RETRIES} 上限后，交易标记为 \texttt{retry\_failed} 并从活跃队列中移除，不混入人工校正列表（避免用户在 Review 页面看到非自身错误导致的异常交易）。管理员可通过 \texttt{POST /api/classification/retry-all} 将失败交易重新入池。
-  \item \textbf{导入批次状态机}。批次状态按 \texttt{queued \(\rightarrow\) processing \(\rightarrow\) done/partial\_failed/failed} 流转。\texttt{progress\_percent} 属性根据 \texttt{processed\_count / total\_count} 动态计算。前端轮询 \texttt{GET /api/imports} 获取批次列表，实时展示导入进度条与状态标签。\texttt{partial\_failed} 状态表示部分交易处理失败但整体流程可继续。
-  \item \textbf{报表任务状态机}。与导入批次类似，\texttt{ReportJob} 状态按 \texttt{queued \(\rightarrow\) processing \(\rightarrow\) done/failed} 流转。异步生成模式（Celery Worker）确保大报表生成不阻塞 API 线程，用户可在生成完成后下载。
-  \item \textbf{接口级权限校验}。所有业务接口在执行查询前均通过 \texttt{get\_current\_user} 依赖注入验证身份，并在查询中添加 \texttt{user\_id} 或组织成员身份过滤。资源归属检查覆盖交易查询、分类修正、批次删除、报表下载等所有变更操作。跨用户或非组织成员的访问尝试统一返回 403 Forbidden。
+  \item \textbf{重复交易识别}。系统在交易保存前规范化关键文本，并根据平台、时间、金额、商户和商品等信息生成稳定摘要。数据库唯一约束进一步阻止同一用户重复保存相同交易。
+  \item \textbf{统一失败重试}。外部模型请求与普通业务请求分离，由后台任务处理器依次执行。请求失败后按照逐步延长的时间间隔再次尝试，达到上限后记录失败原因并停止自动重试，避免持续请求影响系统稳定性。
+  \item \textbf{导入批次状态管理}。导入任务经历等待、处理、完成、部分失败或失败等阶段。系统持续记录总交易数和已处理数量，部分记录失败时仍保留成功数据，并向用户说明处理结果。
+  \item \textbf{报表任务记录}。当前报表在请求过程中同步生成，并记录处理与完成状态。系统已经预留等待和失败状态，但异步提交、状态查询和失败反馈仍需进一步完善。
+  \item \textbf{接口级权限校验}。所有私有资源操作均先验证用户身份，再校验资源归属或组织成员权限。交易、批次、分类和报表等资源不能仅凭编号跨用户访问。
 \end{enumerate}
 
 \section{运维检查}
 
-日常运维中建议按照以下检查清单定期审查系统状态：
+日常运维应围绕系统状态和数据安全进行检查，而不依赖某一条固定命令。建议采用表~\ref{tab:ops-checklist} 所示的检查清单。
 
 \begin{table}[H]
   \centering
   \small
   \caption{运维检查清单}
   \label{tab:ops-checklist}
-  \begin{tabular}{@{}p{2.4cm} p{5.0cm} p{5.4cm}@{}}
+  \begin{tabular}{@{}p{2.4cm} p{5.2cm} p{5.2cm}@{}}
     \toprule
-    \textbf{检查项} & \textbf{操作方式} & \textbf{预期结果与说明} \\
+    \textbf{检查对象} & \textbf{检查内容} & \textbf{判断标准} \\
     \midrule
-    日志监控 & 查看 Uvicorn 访问日志与错误日志 & 关注 5xx 错误频率、超时日志、异常堆栈；建议使用 \texttt{journalctl -u boring-financial} 查看 systemd 服务日志 \\
+    应用日志 & 访问错误、模型超时、异常堆栈与高频失败请求 & 不应持续出现同类服务器错误；异常信息应能定位到业务阶段 \\
     \hline
-    健康检查 & \texttt{curl http://localhost:8000/health} & 返回 \texttt{\{"status": "ok"\}} 表示服务正常；可作为监控系统的探活端点 \\
+    服务健康 & 后端应用及数据库、缓存、磁盘等依赖状态 & 应用可响应，关键依赖均处于可用状态 \\
     \hline
-    数据库备份 & \texttt{pg\_dump boring\_financial > backup.sql}（PostgreSQL）或复制 \texttt{*.sqlite} 文件 & 生产环境建议每日自动备份，保留最近 7 天 \\
+    数据备份 & 数据库和业务文件的最近备份时间、完整性和恢复可用性 & 备份符合保留周期，并定期通过恢复演练验证 \\
     \hline
-    密钥轮换 & 修改 \texttt{.env} 中 \texttt{JWT\_SECRET\_KEY}，重启服务 & 轮换后现有 token 失效，用户需重新登录，建议低峰期执行 \\
+    身份密钥 & 身份凭证密钥与模型服务密钥的有效期和轮换记录 & 密钥未写入公开文件，轮换过程有记录且不影响数据完整性 \\
     \hline
-    依赖安全审计 & \texttt{npm audit}（前端）、\texttt{uv lock --check}（Python） & 关注高危漏洞报告，及时更新受影响的依赖版本 \\
+    依赖安全 & 前后端依赖的已知漏洞和升级影响 & 高风险漏洞得到评估，升级后通过自动化回归验证 \\
     \hline
-    上传文件控制 & 检查 \texttt{MAX\_UPLOAD\_SIZE\_MB} 等配置 & 确保符合安全策略，定期检查 \texttt{uploads/} 目录 \\
+    上传文件 & 文件存储占用、异常格式和历史文件保留情况 & 存储量未超过容量预期，过期文件按策略清理 \\
     \hline
-    权限回归测试 & \texttt{pytest tests/ -k "auth or organization" -v} & 修改认证或组织代码后执行，确保隔离与 RBAC 逻辑未退化 \\
+    权限控制 & 认证、资源归属和组织角色相关回归结果 & 跨用户与越权访问均被拒绝，合法成员功能不受影响 \\
     \hline
-    重试队列监控 & \texttt{GET /api/classification/retry-status}（需 admin token） & 关注 \texttt{failed} 数量；若持续增长，检查外部 API 可用性 \\
+    重试任务 & 等待数量、失败数量、最老任务时间和分类服务可用性 & 不应长期积压；失败增长时能够定位外部服务或配置原因 \\
     \hline
-    磁盘空间检查 & \texttt{du -sh uploads/ reports/} & 不应超过预期；建议定时清理超过 90 天的上传文件 \\
+    系统资源 & 处理器、内存、磁盘和数据库连接使用情况 & 资源使用保持在容量范围内，并在接近阈值时发出告警 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-此外，建议在生产服务器上配置以下监控：
-
-\begin{itemize}
-  \item \textbf{进程存活监控}：通过 systemd 的 \texttt{Restart=always} 或 Docker 的 \texttt{restart: unless-stopped} 确保 Uvicorn 和 Nginx 进程异常退出后自动重启。
-  \item \textbf{内存与 CPU 监控}：使用 \texttt{htop} 或 Prometheus + Node Exporter 监控服务器资源消耗，关注内存泄漏与 CPU 尖刺。
-  \item \textbf{磁盘 I/O 监控}：SQLite 在写入密集型场景下可能出现锁竞争，若切换至 PostgreSQL 则可显著缓解。
-  \item \textbf{外部 API 可用性告警}：若 Retry Queue 的失败数量持续超过阈值，应触发告警通知运维人员检查外部模型服务的可用性与配额状态。
-\end{itemize}
+集中日志、指标面板和自动告警属于后续建设方向。当前报告仅将其作为改进方案，不将具体监控平台视为已经部署的组成部分。
