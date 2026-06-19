@@ -5,6 +5,7 @@
 </p>
 
 <p align="center">
+  <a href="https://opensource.org/license/mit"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
   <a href="https://www.python.org/"><img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white"></a>
   <a href="https://fastapi.tiangolo.com/"><img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.116%2B-009688?logo=fastapi&logoColor=white"></a>
   <a href="https://vuejs.org/"><img alt="Vue 3" src="https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white"></a>
@@ -16,20 +17,34 @@ Boring Financial 将微信、支付宝等平台导出的账单转换为统一交
 
 ![Boring Financial Dashboard](./docs/final-report-latex/figures/截图-dashboard.png)
 
+> [!IMPORTANT]
+> 示例环境变量和 Compose 文件面向本地开发与演示。部署到公网前，请修改数据库密码，配置高强度 `SECRET_KEY`，限制服务端口，并启用 HTTPS。完整说明见[部署文档](./docs/deployment.md)。
+
 ## 目录
 
+- [项目状态](#项目状态)
 - [核心能力](#核心能力)
 - [系统架构](#系统架构)
 - [技术栈](#技术栈)
 - [快速开始](#快速开始)
 - [本地开发](#本地开发)
 - [配置说明](#配置说明)
-- [测试](#测试)
+- [测试与质量检查](#测试与质量检查)
 - [项目结构](#项目结构)
 - [运维命令](#运维命令)
 - [项目文档](#项目文档)
+- [安全与隐私](#安全与隐私)
 - [参与贡献](#参与贡献)
 - [许可证](#许可证)
+
+## 项目状态
+
+| 项目 | 说明 |
+| --- | --- |
+| 当前版本 | `0.1.0`，预发布阶段 |
+| 适用场景 | 个人/家庭账单导入、分类、分析和报表生成 |
+| 默认部署 | 本地开发与演示优先，完整部署可接入 PostgreSQL、Redis、Celery、Nginx 和本地模型服务 |
+| 数据安全 | 请勿提交真实账单、API Key、数据库密码或生产 `.env` 文件 |
 
 ## 核心能力
 
@@ -87,23 +102,24 @@ git clone https://github.com/BoringZheng/Boring-Financial.git
 cd Boring-Financial
 
 cp infra/.env.example infra/.env
+# 生成强随机 JWT 密钥，并替换 infra/.env 中的 SECRET_KEY
+python -c "import secrets; print(secrets.token_urlsafe(48))"
 docker compose --env-file infra/.env -f infra/docker-compose.yml up --build
 ```
 
 服务启动后访问：
 
-- Web 应用：<http://127.0.0.1/>
-- 健康检查：<http://127.0.0.1/health>
-- 后端接口文档：<http://127.0.0.1:8000/docs>
+| 服务 | 地址 |
+| --- | --- |
+| Web 应用 | <http://127.0.0.1/> |
+| 健康检查 | <http://127.0.0.1/health> |
+| 后端接口文档 | <http://127.0.0.1:8000/docs> |
 
 停止服务：
 
 ```bash
 docker compose --env-file infra/.env -f infra/docker-compose.yml down
 ```
-
-> [!IMPORTANT]
-> 示例环境变量和 Compose 文件面向本地开发与演示。部署到公网前，请修改数据库密码，按部署文档向后端传递安全的 `SECRET_KEY`，限制服务端口，并配置 HTTPS。完整说明见[部署文档](./docs/deployment.md)。
 
 ## 本地开发
 
@@ -114,7 +130,7 @@ docker compose --env-file infra/.env -f infra/docker-compose.yml down
 - Node.js 20+
 - npm
 
-### 1. 启动后端
+### 启动后端
 
 轻量开发模式使用 SQLite，不要求 PostgreSQL 或 Redis：
 
@@ -127,7 +143,7 @@ uv run uvicorn backend.main:app --reload
 
 后端默认运行于 <http://127.0.0.1:8000>。首次启动会自动创建运行期数据表并初始化默认分类。
 
-### 2. 启动前端
+### 启动前端
 
 打开另一个终端：
 
@@ -171,7 +187,7 @@ uv run celery -A backend.core.celery_app.celery_app worker -l info
 
 | 变量 | 说明 | 默认值或示例 |
 | --- | --- | --- |
-| `SECRET_KEY` | JWT 签名密钥，生产环境必须修改 | `change-me` |
+| `SECRET_KEY` | JWT 签名密钥，生产环境必须替换为高强度随机值 | `change-me` |
 | `DATABASE_URL` | SQLAlchemy 数据库连接 | `sqlite:///./storage/app.db` |
 | `REDIS_URL` | Celery 使用的 Redis 地址 | `redis://localhost:6379/0` |
 | `CLASSIFICATION_PROVIDER` | 默认分类链路，可设为 `composite` 或 `local_model` | `composite` |
@@ -187,7 +203,7 @@ uv run celery -A backend.core.celery_app.celery_app worker -l info
 
 未配置真实模型 API 时，系统仍可使用规则分类；Docker Compose 默认提供 mock OpenAI-compatible 模型服务用于联调。
 
-## 测试
+## 测试与质量检查
 
 运行后端测试：
 
@@ -234,7 +250,8 @@ Boring-Financial/
 ├── docs/                    架构、接口、开发、部署和课程报告
 ├── scripts/                 开发与部署脚本
 ├── legacy/                  旧版账单处理脚本
-└── category_map.csv         默认分类规则数据
+├── category_map.csv         默认分类规则数据
+└── LICENSE                  MIT 许可证
 ```
 
 ## 运维命令
@@ -266,6 +283,13 @@ uv run bf-admin retry-all --user-id <id>
 
 FastAPI 启动后也可通过 `/docs` 查看自动生成的 OpenAPI 文档。
 
+## 安全与隐私
+
+- 不要提交真实账单、生产环境变量、数据库备份或模型 API Key。
+- 生产环境必须替换默认密码和 `SECRET_KEY`，并通过 HTTPS 暴露服务。
+- 公开 Issue 中请勿粘贴敏感账单内容、访问令牌、日志密钥或个人身份信息。
+- 如发现安全问题，请按 [`SECURITY.md`](./SECURITY.md) 中的私密披露流程联系维护者，避免在公开讨论中披露可利用细节。
+
 ## 参与贡献
 
 欢迎通过 Issue 报告问题或提出功能建议。提交 Pull Request 前，请：
@@ -285,4 +309,4 @@ docs: update deployment guide
 
 ## 许可证
 
-当前仓库尚未包含 `LICENSE` 文件。在明确许可证之前，项目代码默认保留所有权利；如需复制、修改或分发，请先联系仓库维护者。
+本项目采用 [MIT License](./LICENSE)。

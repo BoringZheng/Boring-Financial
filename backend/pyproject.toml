@@ -8,6 +8,10 @@ version = "0.1.0"
 description = "Backend service for Boring Financial"
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "BoringZheng" }
+]
 dependencies = [
   "fastapi>=0.116",
   "uvicorn[standard]>=0.35",
