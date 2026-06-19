@@ -1,0 +1,29 @@
+@startuml
+left to right direction
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam nodesep 44
+skinparam ranksep 36
+skinparam dpi 180
+hide circle
+
+class ReportJob {
+  +id: int
+  +status: str
+  +date_from: datetime?
+  +date_to: datetime?
+}
+
+class GeneratedReport {
+  +id: int
+  +title: str
+  +file_path: str
+  +created_at: datetime
+}
+
+ReportJob -- GeneratedReport
+
+@enduml

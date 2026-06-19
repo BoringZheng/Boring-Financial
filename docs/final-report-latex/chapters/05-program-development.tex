@@ -1,39 +1,57 @@
 \chapter{程序开发}
 
-本章阐述系统的程序组织方式、数据库设计、设计模式应用以及核心流程设计。面向对象设计集中体现在四个子系统：领域实体模型、分类器策略链、账单解析器注册表与报表构建器。
+本章阐述系统的程序组织方式、数据库设计、设计模式应用以及核心流程设计。重点说明这些设计如何支撑多平台账单解析、语义分类、人工校正、家庭聚合与报表生成，而不是逐行展开具体代码。
 
 \section{面向对象程序组织}
 
-系统并非全量采用面向对象范式——在用户认证、API 路由、Dashboard 聚合等模块中，函数式与过程式组织更为自然。OO 原则集中于以下四个区域。Pydantic DTO 与 FastAPI 依赖注入在前一章安全机制部分已做阐述。
+系统并非全量采用面向对象范式。对于认证、接口编排和简单聚合计算，过程式组织更直接；对于账单解析、分类策略、领域实体和报表生成等存在扩展变化点的部分，则采用面向对象方法控制复杂度。
 
 \subsection{领域实体及其关联关系}
 
-系统使用 SQLAlchemy ORM 定义 12 个实体，统一继承 \texttt{Base(DeclarativeBase)}，采用 Data Mapper 模式将领域模型与持久化逻辑解耦——实体类不包含 SQL 语句，所有查询通过 Session 与 Select 构建器完成。
+系统使用 ORM 建立领域实体与数据库表之间的映射，采用 Data Mapper 模式将领域概念与持久化细节解耦。实体对象主要表达用户、账单、交易、分类、组织和报表之间的关系，查询与事务处理则由服务层统一承担。
 
-\texttt{TimestampMixin}（\texttt{models/entities.py:12}）通过 Python 多重继承为 8 个实体提供 \texttt{created\_at/updated\_at} 字段，以 Mixin 模式横向复用时间戳关注点，消除字段声明重复。
+对于创建时间、更新时间等跨实体通用属性，系统采用 Mixin 方式复用公共字段，避免在多个实体中重复维护相同定义。该设计降低了后续调整审计字段时的维护成本。
 
-实体关联的核心拓扑如下：\texttt{User} 位于关联中心，向多个方向辐射——通过 \texttt{import\_batches} 管理导入任务，通过 \texttt{transactions} 持有全部交易记录，通过 \texttt{categories} 维护自定义分类；\texttt{ImportBatch} 聚合 \texttt{UploadedFile}，两者共同关联至 \texttt{Transaction}；\texttt{Transaction} 通过 \texttt{auto\_category\_id} 与 \texttt{final\_category\_id} 双 FK 指向 \texttt{Category}，同时向 \texttt{ClassificationResult} 和 \texttt{ClassificationCache} 辐射分类历史与缓存；家庭组织域中 \texttt{Organization} 通过 \texttt{OrganizationMember} 关联表与 \texttt{User} 建立多对多关系。
+实体关联的核心拓扑以用户为中心展开：用户拥有导入任务、交易记录、自定义分类和报表；导入批次关联原始上传文件与解析后的交易；交易同时保留系统建议分类和用户最终确认分类，以支持“AI 初分 + 人工校正”的业务闭环；家庭组织通过成员关系连接多个用户，在不改变个人账本归属的前提下实现聚合分析。
 
-\texttt{Transaction} 表基于 \texttt{(user\_id, dedupe\_hash)} 唯一约束实现去重，\texttt{dedupe\_hash} 由时间、金额、商户、商品、备注五字段的规范化值经 SHA-256 生成。双分类字段设计中 \texttt{auto\_category\_id} 存储模型/规则的建议分类（可被重分类更新），\texttt{final\_category\_id} 存储人工修正后的最终分类，非 NULL 时优先于自动分类。\texttt{ClassificationResult} 表只增不改，每次分类操作新增一条记录，用于追溯分类器表现变化。
+交易实体的关键设计是去重、分类追溯和最终口径分离。系统通过交易特征生成稳定指纹来识别重复导入；建议分类与最终分类分开保存，使模型判断和人工修正可以并存；分类历史以追加方式记录，便于后续分析分类策略变化。
 
 \begin{figure}[p]
   \centering
-  \includegraphics[
-    width=0.92\textwidth,
-    height=0.76\textheight,
-    keepaspectratio
-  ]{领域实体类图.png}
+  \begin{minipage}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,height=0.25\textheight,keepaspectratio]{领域实体-用户组织类图.png}
+    {\small (a) 用户与组织}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,height=0.25\textheight,keepaspectratio]{领域实体-导入交易类图.png}
+    {\small (b) 导入与交易}
+  \end{minipage}
+
+  \vspace{0.8em}
+
+  \begin{minipage}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,height=0.34\textheight,keepaspectratio]{领域实体-分类体系类图.png}
+    {\small (c) 分类体系}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,height=0.25\textheight,keepaspectratio]{领域实体-报表生成类图.png}
+    {\small (d) 报表生成}
+  \end{minipage}
   \caption{领域实体类图}
   \label{fig:entity-class}
 \end{figure}
 
 \subsection{分类器策略}
 
-分类子系统围绕策略、责任链与外观三种模式组织，由五个类构成。
+分类子系统围绕策略、责任链与外观三种模式组织，用于在规则分类、缓存分类、外部大模型和本地模型之间建立可替换、可降级的分类链路。
 
-\texttt{CompositeClassifier}（\texttt{services/classifiers.py:267}）作为外观入口封装分类全流程。其 \texttt{classify()} 方法编排三级责任链：检查 \texttt{ClassificationCache} 缓存 → 调用模型 API（外部模型或本地模型，由配置决定）→ \texttt{RuleBasedClassifier} 规则兜底。外部模型请求通过重试队列异步入队，避免并发 API 调用；超时异常经指数退避重试，达到上限后标记为 \texttt{retry\_failed} 并从活跃队列移除。\texttt{OpenAICompatibleClassifier} 与 \texttt{LocalModelClassifier} 均实现统一的 \texttt{classify(transaction) -> ClassificationOutput} 调用约定——前者通过 httpx 调用 OpenAI-compatible \texttt{/chat/completions}，后者继承前者并覆盖 provider 配置指向本地 vLLM 服务，两者作为同一层级的可替换策略。\texttt{RuleBasedClassifier} 按优先级匹配分类规则，命中返回置信度 0.99，未命中返回 None。\texttt{ClassificationOutput} 作为 dataclass 统一承载分类结果。
+外观对象对外提供统一分类入口，内部按“缓存优先、模型判断、规则兜底”的顺序组织责任链。模型服务不可用或超时时，系统不会阻塞整批导入，而是将交易转入后续重试流程；规则分类作为最低保障，确保系统在外部依赖异常时仍能给出基础结果。外部模型与本地模型遵循同一输出约定，因此后续更换模型供应商时不需要改动上层业务流程。
 
-Strategy 模式使三种分类器可互换，各自封装不同的分类逻辑。Chain of Responsibility 提供优雅降级路径——缓存命中直接返回，模型不可用时自动降至规则。Facade 模式将缓存管理、重试逻辑、结果存储等复杂性隐藏在 \texttt{classify()} 内部，调用方只需传入交易对象。
+Strategy 模式使不同分类策略可以独立演进；Chain of Responsibility 提供清晰的降级路径；Facade 模式隐藏缓存、重试和结果记录等内部复杂性，使导入流程只需关心“获得分类建议”这一业务结果。
 
 \begin{figure}[!htbp]
   \centering
@@ -50,11 +68,11 @@ Strategy 模式使三种分类器可互换，各自封装不同的分类逻辑�
 
 解析子系统负责将微信/支付宝异构账单文件转换为统一交易结构，采用策略、适配器与注册表三种模式。
 
-\texttt{ParserRegistry}（\texttt{services/parsers.py:239}）作为工厂入口，\texttt{parse\_file(path)} 方法执行完整流程：通过文件名关键字与文件内容预览检测平台 → \texttt{StatementReader} 读取文件（自动检测 6 种编码、定位表头行、适配 Excel/CSV 格式）→ 选择对应平台解析器 → 转换为 \texttt{ParsedTransaction} 统一结构 → \texttt{TransactionNormalizer} 对商户、商品、备注字段做 NFKC 归一化并生成 SHA-256 去重哈希。
+解析子系统先识别账单来源，再选择对应解析策略，将不同平台的列名、编码和表头差异统一转换为系统内部交易格式。读取器负责屏蔽文件编码和表格格式差异，解析器负责平台语义映射，规范化环节负责生成稳定的交易特征。
 
-\texttt{AlipayParser} 与 \texttt{WeChatParser} 各自维护一套平台特有的列名映射（如支付宝的「交易对方」→ merchant、微信的「当前状态」→ status），将原生 DataFrame 列映射为 \texttt{ParsedTransaction} 统一结构。Strategy 模式使平台解析器可独立扩展——新增平台只需添加解析器并在 \texttt{ParserRegistry.\_ordered\_parsers()} 中注册。Adapter 模式体现在 \texttt{StatementReader} 类——将 pandas 的复杂 API（多编码、多格式、多表头位置）适配为统一的 \texttt{read(path)} 接口。Registry/Factory 模式通过 \texttt{ParserRegistry} 实现解析器的自动选择与调度。
+支付宝与微信账单的差异被封装在各自解析策略中，上层导入流程只处理统一交易结果。Strategy 模式支持新增平台时局部扩展；Adapter 模式把底层文件读取复杂性收敛为统一读取能力；Registry/Factory 模式负责解析器选择，避免在业务流程中堆积平台判断逻辑。
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
   \centering
   \includegraphics[width=0.92\textwidth]{解析器类图.png}
   \caption{账单解析器类图}
@@ -63,13 +81,13 @@ Strategy 模式使三种分类器可互换，各自封装不同的分类逻辑�
 
 \subsection{报表构建器}
 
-报表生成由 \texttt{ReportBuilder}（\texttt{services/reports.py:16}）单一类实现，采用 Builder 模式将复杂 PDF 构建过程拆分为有序步骤。
+报表生成采用 Builder 模式，将复杂 PDF 构建过程拆分为封面、摘要指标、分类汇总、商户排行和交易明细等有序步骤。
 
-\texttt{build()} 方法编排完整构建序列：\texttt{\_build\_context()} 聚合查询交易数据与分类映射 → \texttt{\_add\_cover()} 渲染深蓝色封面 → \texttt{\_section\_title()} 与 \texttt{\_metric\_row()} 渲染摘要指标卡片 → \texttt{\_simple\_table()} 渲染分类汇总与 Top 商户表格 → 逐分类渲染交易明细页 → 保存 PDF 并写入 \texttt{GeneratedReport} 记录。\texttt{\_resolve\_unicode\_font()} 按优先级搜索 8 个候选路径（项目内置字体、Windows/Linux 系统字体目录），自动检测中文字体。
+构建过程先准备统计上下文，再按固定顺序渲染各章节，最后保存报表并记录生成结果。数据聚合与版面渲染分离，使同一份统计数据可以服务于不同报表页面，也便于后续加入新的分析章节。
 
-Builder 模式使每个方法关注单一渲染关注点，扩展新章节只需新增方法并在 \texttt{build()} 中插入调用。\texttt{\_build\_context()} 的数据聚合与渲染逻辑分离，使同一份数据可用于不同渲染阶段。
+Builder 模式使每个构建步骤关注单一报表片段，新增章节时只需扩展构建序列，不会影响导入、分类和看板等其他业务模块。
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
   \centering
   \includegraphics[width=0.85\textwidth]{报表构建器类图.png}
   \caption{报表构建器类图}
@@ -78,30 +96,32 @@ Builder 模式使每个方法关注单一渲染关注点，扩展新章节只需
 
 \section{数据库设计}
 
-系统数据库共 12 张表，按业务域分两组展示。
+系统数据库共 12 张表，按业务域分两组展示，分别对应核心账单分类闭环和家庭组织、报表等扩展能力。
 
 \subsection{核心账单与分类}
 
-核心域涵盖 \texttt{users}、\texttt{categories}、\texttt{category\_rules}、\texttt{import\_batches}、\texttt{uploaded\_files}、\texttt{transactions}、\texttt{classification\_results}、\texttt{classification\_caches} 八张表。
+核心域涵盖用户、分类、分类规则、导入批次、上传文件、交易、分类结果和分类缓存八类数据对象。
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
   \centering
-  \includegraphics[
-    width=0.60\textwidth,
-    height=0.56\textheight,
-    keepaspectratio
-  ]{核心账单ER图.png}
+  \makebox[0pt][c]{%
+    \includegraphics[
+      width=1.08\textwidth,
+      height=0.44\textheight,
+      keepaspectratio
+    ]{核心账单ER图.png}%
+  }
   \caption{核心账单与分类 ER 图}
   \label{fig:er-core}
 \end{figure}
 
-关键设计决策：\texttt{transactions} 表以 \texttt{(user\_id, dedupe\_hash)} 联合唯一约束阻止重复导入；双分类字段（\texttt{auto\_category\_id} 与 \texttt{final\_category\_id}）使模型建议与人工修正共存，后者非 NULL 时优先；\texttt{needs\_review} 布尔字段标识低置信度或未分类交易，前端按此提取校正队列；\texttt{classification\_results} 只增不改，保留每次分类的完整记录用于追溯；\texttt{classification\_caches} 以 \texttt{(user\_id, provider, text\_hash)} 唯一约束确保缓存按用户与 provider 隔离。
+关键设计决策包括：按用户维度识别重复交易，避免同一账单被反复导入；同时保存建议分类和最终分类，保证人工校正优先于自动判断；低置信度交易被纳入校正队列；分类历史采用追加记录，支持追溯模型表现；分类缓存按用户和供应商隔离，避免跨用户数据混淆。
 
 \subsection{家庭组织与报表扩展}
 
-扩展域涵盖 \texttt{organizations}、\texttt{organization\_members}、\texttt{report\_jobs}、\texttt{generated\_reports} 四张表（\texttt{users} 与 \texttt{transactions} 与核心域共享）。
+扩展域涵盖家庭组织、组织成员、报表任务和已生成报表四类数据对象，并复用核心域中的用户与交易数据。
 
-关键设计决策：\texttt{organization\_members.role} 为枚举语义（owner/admin/member），owner 拥有完整管理权限，admin 可管理普通成员，member 仅可查看聚合数据。家庭组织不改变交易归属——聚合查询通过收集 \texttt{organization\_members.user\_id} 列表并以 \texttt{transactions.user\_id IN (...)} 过滤实现，而非新增 \texttt{organization\_id} 外键。\texttt{report\_jobs} 记录生成请求的状态流转（queued → processing → done/failed），\texttt{generated\_reports} 记录输出文件路径。
+关键设计决策是家庭组织不改变个人交易归属，而是在查询时按成员范围聚合数据。家庭所有者、管理员和普通成员拥有不同操作权限；报表任务独立记录生成状态，已生成报表独立记录输出结果，便于用户重复下载和运维人员排查失败任务。
 
 \begin{figure}[H]
   \centering
@@ -116,16 +136,16 @@ Builder 模式使每个方法关注单一渲染关注点，扩展新章节只需
 
 \begingroup
 \footnotesize
-\begin{longtable}{@{}p{2.2cm} p{3.4cm} p{4.8cm} p{2.4cm}@{}}
+\begin{longtable}{@{}p{2.3cm} p{3.4cm} p{4.8cm} p{2.3cm}@{}}
     \caption{设计模式应用汇总}
     \label{tab:design-patterns}\\
     \toprule
-    \textbf{设计模式} & \textbf{代码位置} & \textbf{说明} & \textbf{对应节} \\
+    \textbf{设计模式} & \textbf{应用区域} & \textbf{设计作用} & \textbf{对应节} \\
     \midrule
     \endfirsthead
     \multicolumn{4}{c}{\footnotesize 表~\thetable\quad 设计模式应用汇总（续）} \\
     \toprule
-    \textbf{设计模式} & \textbf{代码位置} & \textbf{说明} & \textbf{对应节} \\
+    \textbf{设计模式} & \textbf{应用区域} & \textbf{设计作用} & \textbf{对应节} \\
     \midrule
     \endhead
     \midrule
@@ -133,31 +153,31 @@ Builder 模式使每个方法关注单一渲染关注点，扩展新章节只需
     \endfoot
     \bottomrule
     \endlastfoot
-    Data Mapper & \texttt{models/entities.py}（全部 ORM 类） & ORM 将领域实体与持久化解耦，实体不含 SQL & 6.1.1 \\
+    Data Mapper & 领域实体与持久化层 & 将业务实体与数据库访问解耦，降低数据层变化对业务层的影响 & 6.1.1 \\
     \hline
-    Mixin & \texttt{entities.py:12} TimestampMixin & 多重继承为 8 个实体横向复用时间戳字段 & 6.1.1 \\
+    Mixin & 通用审计字段 & 复用创建时间、更新时间等公共属性，减少重复定义 & 6.1.1 \\
     \hline
-    Strategy & \texttt{classifiers.py:58,104,257}；\texttt{parsers.py:144,182} & 同接口下可互换的算法族，各自封装平台/provider 逻辑 & 6.1.2/6.1.3 \\
+    Strategy & 分类器与平台解析器 & 封装可替换的分类和解析策略，支持供应商或平台扩展 & 6.1.2/6.1.3 \\
     \hline
-    Chain of Responsibility & \texttt{classifiers.py:428} CompositeClassifier.classify & 分类请求沿 缓存→API→规则 链路传递，不可用时自动降级 & 6.1.2 \\
+    Chain of Responsibility & 分类链路 & 分类请求沿缓存、模型、规则顺序处理，不可用时自动降级 & 6.1.2 \\
     \hline
-    Facade & \texttt{classifiers.py:267} CompositeClassifier & 封装缓存、模型调用、重试入队、规则降级等复杂逻辑 & 6.1.2 \\
+    Facade & 分类入口 & 封装缓存、模型调用、重试和规则兜底，对导入流程暴露统一能力 & 6.1.2 \\
     \hline
-    Adapter & \texttt{parsers.py:41} StatementReader & 将 pandas 多编码/多格式 API 适配为统一 read 接口 & 6.1.3 \\
+    Adapter & 账单文件读取 & 将多编码、多格式账单文件适配为统一读取结果 & 6.1.3 \\
     \hline
-    Registry/Factory & \texttt{parsers.py:239} ParserRegistry & 根据文件名/内容识别平台，选择解析器并调度执行 & 6.1.3 \\
+    Registry/Factory & 解析器选择 & 根据文件特征选择合适解析策略，避免业务流程耦合平台判断 & 6.1.3 \\
     \hline
-    Builder & \texttt{reports.py:16} ReportBuilder & 将 PDF 多页渲染分解为独立方法，build() 按序列编排 & 6.1.4 \\
+    Builder & PDF 报表生成 & 将多页报表拆分为封面、摘要、表格、明细等构建步骤 & 6.1.4 \\
     \hline
-    Template Method & \texttt{classifiers.py:115} OpenAICompatibleClassifier & classify() 定义 build→call→parse→return 固定骨架 & 6.1.2 \\
+    Template Method & 模型供应商适配 & 固定模型分类的主要步骤，使不同供应商只替换差异部分 & 6.1.2 \\
     \hline
-    DTO & \texttt{schemas/*.py} 全部 Pydantic 模型 & 请求验证与响应序列化，区分于 ORM 实体 & 5.7 \\
+    DTO & 接口数据契约 & 区分外部输入输出与内部实体，提升接口可维护性 & 5.7 \\
     \hline
-    Dependency Injection & \texttt{dependencies.py} FastAPI Depends & get\_current\_user、get\_db\_session 解耦认证与会话管理 & 5.7 \\
+    Dependency Injection & 认证与会话管理 & 将身份校验、数据库会话等横切能力从业务逻辑中抽离 & 5.7 \\
     \hline
-    Producer-Consumer & \texttt{retry\_queue.py} 后台线程 & 串行消费 retry\_queue 中的交易，调用外部模型 & 8.3 \\
+    Producer-Consumer & 模型重试队列 & 将外部模型调用从用户请求中解耦，提升故障恢复能力 & 8.3 \\
     \hline
-    RBAC & \texttt{organizations.py} verify\_org\_* 函数 & 按 owner/admin/member 角色校验组织操作权限 & 5.5 \\
+    RBAC & 家庭组织权限 & 按角色区分查看、管理和成员维护权限，降低越权风险 & 5.5 \\
 \end{longtable}
 \endgroup
 
@@ -165,7 +185,7 @@ Builder 模式使每个方法关注单一渲染关注点，扩展新章节只需
 
 \subsection{账单导入与大模型初分}
 
-用户上传账单文件的完整处理链路包含六个阶段。(1) 前端通过 \texttt{POST /api/imports} 上传文件，后端创建 \texttt{ImportBatch} 与 \texttt{UploadedFile}，前端轮询 \texttt{GET /api/imports} 跟踪批次进度。(2) \texttt{ParserRegistry} 检测平台后，由 \texttt{StatementReader} 读取文件，对应平台解析器将原生列映射为 \texttt{ParsedTransaction}。(3) \texttt{TransactionNormalizer} 做 NFKC 归一化并生成 \texttt{dedupe\_hash}，写入前按唯一约束去重。(4) 每笔交易传入 \texttt{CompositeClassifier.classify()}，按缓存→模型→规则的顺序获取分类结果。外部模型请求进入重试队列由后台线程串行消费，超时则按指数退避策略重试（等待间隔为 $\text{base\_delay} \times 2^{\text{retry\_count}}$，上限 300 秒）。(5) 分类结果同时写入 \texttt{transactions} 表（更新 \texttt{auto\_category\_id/confidence/provider/needs\_review}）和 \texttt{classification\_results} 表（新增不可变历史记录）。(6) 全部交易处理完毕后，\texttt{ImportBatch.status} 更新为 \texttt{done} 或 \texttt{partial\_failed}。
+用户上传账单文件的完整处理链路包含六个阶段。(1) 用户提交账单文件后，系统创建导入任务并向页面反馈处理进度。(2) 系统识别账单平台，选择对应解析策略，将不同格式转换为统一交易结构。(3) 交易进入规范化与去重环节，重复记录被跳过，新交易进入分类流程。(4) 分类链路按缓存、模型、规则的顺序生成分类建议，外部模型异常时转入重试机制。(5) 系统保存分类建议、置信度和理由，同时记录分类历史，便于后续追溯。(6) 导入任务结束后，页面展示成功、失败和待复核交易数量，引导用户进入校正或分析页面。
 
 \begin{figure}[H]
   \centering
@@ -176,7 +196,7 @@ Builder 模式使每个方法关注单一渲染关注点，扩展新章节只需
 
 \subsection{家庭组织聚合查询}
 
-家庭组织视图的数据聚合不改变交易归属，在查询层面通过成员身份进行范围扩展。用户进入组织页面后，前端调用 \texttt{GET /api/organizations} 获取当前用户加入的所有组织及角色。查看家庭 Dashboard 或消费人格时，前端传入 \texttt{organization\_id} 参数。后端先校验成员身份（非成员返回 403），再通过 \texttt{get\_member\_user\_ids()} 收集全部成员 \texttt{user\_id} 列表，传入对应的聚合服务。Dashboard 返回家庭总支出/收入/净流入与分类分布，Personality 基于全部成员交易计算家庭整体消费人格画像与财务健康评分，Reports 生成聚合 PDF 报表。
+家庭组织视图的数据聚合不改变交易归属，而是在查询层面根据成员身份扩大统计范围。用户进入组织页面后，系统展示其加入的组织、角色和成员信息。查看家庭看板、人格画像或报表时，系统先确认用户属于该组织，再汇总组织成员的交易数据。看板返回家庭收入、支出、净流入和分类分布，人格分析基于成员交易计算家庭整体画像，报表模块生成家庭口径的 PDF 文档。
 
 \begin{figure}[!htbp]
   \centering

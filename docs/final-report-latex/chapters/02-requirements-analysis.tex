@@ -48,12 +48,12 @@
 \caption{功能需求列表}
 \label{tab:functional-requirements}\\
 \toprule
-\textbf{ID} & \textbf{需求描述} & \textbf{优先级} & \textbf{实现依据} \\
+\textbf{ID} & \textbf{需求描述} & \textbf{优先级} & \textbf{验收依据} \\
 \midrule
 \endfirsthead
 \multicolumn{4}{c}{\small 表~\thetable\quad 功能需求列表（续）} \\
 \toprule
-\textbf{ID} & \textbf{需求描述} & \textbf{优先级} & \textbf{实现依据} \\
+\textbf{ID} & \textbf{需求描述} & \textbf{优先级} & \textbf{验收依据} \\
 \midrule
 \endhead
 \midrule
@@ -61,35 +61,35 @@
 \endfoot
 \bottomrule
 \endlastfoot
-FR-01 & 用户注册、登录及 Token 鉴权 & P0 & \texttt{routes\_auth.py}、前端登录页、JWT 中间件 \\
+FR-01 & 用户注册、登录及身份验证 & P0 & 用户可完成注册和登录，未登录状态下无法访问业务页面 \\
 \hline
-FR-02 & 多用户数据隔离，账单与报表按用户归属 & P0 & \texttt{dependencies.py} 依赖注入、资源归属校验 \\
+FR-02 & 多用户数据隔离，账单与报表按用户归属 & P0 & 不同账号只能查看和操作自己的交易、分类与报表 \\
 \hline
-FR-03 & 支持微信/支付宝账单文件上传导入 & P0 & \texttt{routes\_imports.py}、导入页面 \\
+FR-03 & 支持微信/支付宝账单文件上传导入 & P0 & 用户可上传账单文件，并看到导入进度和处理结果 \\
 \hline
-FR-04 & 不同平台账单统一解析为标准化交易结构 & P0 & \texttt{services/parsers.py}、\texttt{test\_parsers.py} \\
+FR-04 & 不同平台账单统一解析为标准化交易结构 & P0 & 微信和支付宝账单均能转换为统一的交易列表 \\
 \hline
-FR-05 & 大模型语义分类，记录来源、置信度与理由 & P0 & \texttt{services/classifiers.py}、\texttt{test\_classifiers.py} \\
+FR-05 & 大模型语义分类，记录来源、置信度与理由 & P0 & 每笔交易显示建议分类、可信程度和可理解的分类理由 \\
 \hline
-FR-06 & 交易列表筛选（日期、平台、分类、关键词）与分页 & P0 & \texttt{routes\_transactions.py}、交易列表页面 \\
+FR-06 & 交易列表筛选（日期、平台、分类、关键词）与分页 & P0 & 用户可按多条件检索交易，分页结果与筛选条件一致 \\
 \hline
-FR-07 & 人工校正低置信度或语义误判交易 & P0 & \texttt{routes\_transactions.py} PATCH 接口、校正工作台 \\
+FR-07 & 人工校正低置信度或语义误判交易 & P0 & 用户可修改错误分类，校正后结果反映到分析与报表中 \\
 \hline
-FR-08 & 用户自定义分类管理 & P1 & \texttt{routes\_categories.py}、分类管理页面 \\
+FR-08 & 用户自定义分类管理 & P1 & 用户可新增、编辑和停用个人分类，系统分类保持可用 \\
 \hline
-FR-09 & Dashboard 展示收入、支出、结余、储蓄率、分类占比 & P0 & \texttt{routes\_dashboard.py}、\texttt{services/analytics.py} \\
+FR-09 & Dashboard 展示收入、支出、结余、储蓄率、分类占比 & P0 & 看板指标与导入后的交易数据一致，并支持时间范围切换 \\
 \hline
-FR-10 & 消费人格画像、财务健康评分与问卷自评 & P1 & \texttt{routes\_personality.py}、\texttt{services/personality.py} \\
+FR-10 & 消费人格画像、财务健康评分与问卷自评 & P1 & 页面展示人格类型、维度评分，并支持自评结果对比 \\
 \hline
-FR-11 & 家庭组织创建与成员角色管理 & P1 & \texttt{routes\_organizations.py}、\texttt{services/organizations.py} \\
+FR-11 & 家庭组织创建与成员角色管理 & P1 & 管理员可创建家庭、添加成员并调整成员权限 \\
 \hline
-FR-12 & 家庭组织 Dashboard 与消费人格聚合 & P1 & \texttt{organization\_id} 查询参数、组织页面 \\
+FR-12 & 家庭组织 Dashboard 与消费人格聚合 & P1 & 家庭视图可展示成员聚合后的收支概览与人格画像 \\
 \hline
-FR-13 & PDF 报表生成与下载，支持个人与家庭模式 & P0 & \texttt{routes\_reports.py}、\texttt{services/reports.py} \\
+FR-13 & PDF 报表生成与下载，支持个人与家庭模式 & P0 & 用户可按日期和账单范围生成、预览并下载报表 \\
 \hline
-FR-14 & 分类供应商切换（规则/外部 API/本地模型） & P1 & \texttt{services/classifiers.py} CompositeClassifier \\
+FR-14 & 分类供应商切换（规则/外部 API/本地模型） & P1 & 管理员可配置分类方式，模型不可用时系统仍能继续工作 \\
 \hline
-FR-15 & 外部模型失败重试队列与管理员控制 & P1 & \texttt{routes\_classification.py}、\texttt{retry\_queue.py} \\
+FR-15 & 外部模型失败重试队列与管理员控制 & P1 & 分类失败可自动重试，管理员可查看失败数量并触发恢复 \\
 \end{longtable}
 \endgroup
 
@@ -114,13 +114,13 @@ NFR-02 & 隐私保护 & P0 & 账单数据、分类结果与 PDF 报表属于敏�
 \hline
 NFR-03 & 可用性 & P0 & 用户可按“导入→初分→校正→分析→报表”路径完成核心任务；家庭功能不破坏个人模式 \\
 \hline
-NFR-04 & 性能 & P1 & 非模型调用接口（认证、查询、聚合分析）在单用户正常操作下 P95 响应时间应低于 1 秒；大模型分类调用设有 60 秒超时保护（\texttt{model\_timeout\_seconds=60}）与最多 2 次自动重试；≤1000 笔交易的单批次文件解析阶段应在 10 秒内完成，进度通过轮询接口实时反映 \\
+NFR-04 & 性能 & P1 & 常规查询和聚合分析在单用户正常操作下应保持秒级响应；大模型分类设有超时和自动重试保护；千笔以内账单应能在可接受时间内完成解析并展示进度 \\
 \hline
 NFR-05 & 可部署性 & P0 & 支持本地开发模式、Docker Compose 部署与裸机部署三种方式 \\
 \hline
-NFR-06 & 可维护性 & P0 & 前后端分离；后端按 routes/services/models/schemas 分层组织 \\
+NFR-06 & 可维护性 & P0 & 前后端职责分离，业务逻辑、数据模型、接口契约和部署配置边界清晰 \\
 \hline
-NFR-07 & 可测试性 & P0 & 后端具备 pytest 自动化测试套件，前端通过 TypeScript 类型检查与生产构建验证 \\
+NFR-07 & 可测试性 & P0 & 核心功能具备自动化测试和构建验证，关键用户流程可通过验收清单复核 \\
 \hline
 NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部署组件预留扩展接口 \\
 \bottomrule
@@ -154,7 +154,7 @@ NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部
   \item owner 或 admin 通过用户名搜索添加成员，并可提升普通成员为 admin。
   \item 家庭成员进入组织页面查看家庭合计收入、支出、交易数与消费人格聚合雷达图。
   \item owner 或 admin 可触发家庭范围内的重分类操作；普通 member 只能查看聚合结果。
-  \item 不传入 \texttt{organization\_id} 参数时，Dashboard、Personality 和 Reports 仍按个人账本模式工作，保持向后兼容。
+  \item 用户未选择家庭视图时，看板、人格分析和报表仍按个人账本模式工作，保持个人使用路径不变。
 \end{enumerate}
 
 \subsection{系统运维场景}
@@ -184,11 +184,11 @@ NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部
 \hline
 用户上传不支持的账单格式 & 导入失败并记录具体错误信息，页面提示用户重新上传 \\
 \hline
-重复导入同一笔交易 & 通过 \texttt{dedupe\_hash} 字段去重，避免重复记录入库 \\
+重复导入同一笔交易 & 系统自动识别重复记录，避免重复统计和重复展示 \\
 \hline
-模型供应商不可用 & 交易进入重试队列，后台串行重试；超时耗尽后标记为 retry\_failed \\
+模型供应商不可用 & 交易进入待重试状态，系统自动恢复；多次失败后提示管理员处理 \\
 \hline
-用户尝试访问他人报表或交易 & 后端按 \texttt{current\_user.id} 校验资源归属，拒绝非授权访问 \\
+用户尝试访问他人报表或交易 & 系统校验资源归属，拒绝非授权访问 \\
 \hline
 报表生成失败 & 记录任务状态与错误信息，用户可调整参数后重新触发生成 \\
 \bottomrule
@@ -227,22 +227,22 @@ NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部
 \hline
 \textbf{前置条件} & 用户已登录；待上传文件为微信或支付宝 CSV 格式 \\
 \hline
-\textbf{后置条件} & 交易记录入库完毕，语义初分完成，批次状态置为 \texttt{done} 或 \texttt{partial\_failed} \\
+\textbf{后置条件} & 交易记录导入完毕，语义初分完成，页面展示成功或部分成功状态 \\
 \hline
 \textbf{基本流程} &
 1）用户拖拽或选择账单文件。\newline
-2）前端调用 \texttt{POST /api/imports} 上传文件内容。\newline
-3）系统创建 \texttt{ImportBatch}，将原始文件写入磁盘。\newline
-4）后台线程解析 CSV，将各平台格式转换为统一 \texttt{Transaction} 结构。\newline
-5）对每笔新交易计算 \texttt{dedupe\_hash}，跳过已存在的重复记录。\newline
-6）调用 \texttt{CompositeClassifier}（缓存→外部 API→本地模型→规则回退）进行语义分类，结果写入 \texttt{auto\_category\_id}、\texttt{auto\_confidence}、\texttt{auto\_reason}。\newline
-7）批次状态更新为 \texttt{done}，前端轮询后展示完成提示。\\
+2）系统接收文件并创建导入任务，页面开始展示处理进度。\newline
+3）系统识别账单来源，将原始记录转换为统一交易格式。\newline
+4）系统跳过已存在的重复交易，避免重复统计。\newline
+5）系统对新交易进行语义分类，生成分类建议、置信度和理由。\newline
+6）低置信度或失败交易进入待处理状态，正常交易进入后续统计。\newline
+7）导入任务结束后，页面展示成功数量、失败数量和下一步操作入口。\\
 \hline
-\textbf{替代流程 A} & 部分交易模型超时（超过 60 秒）：失败交易标记为 \texttt{retry\_queue}，其余交易正常入库，批次状态置为 \texttt{partial\_failed}。 \\
+\textbf{替代流程 A} & 部分交易分类超时：系统保留已成功处理的交易，并将失败交易加入后续重试或人工处理范围。 \\
 \hline
-\textbf{替代流程 B} & 文件含已导入交易：\texttt{dedupe\_hash} 自动去重，跳过重复记录，批次仍正常完成。 \\
+\textbf{替代流程 B} & 文件含已导入交易：系统自动跳过重复记录，批次仍正常完成。 \\
 \hline
-\textbf{异常流程} & 文件格式无法识别（非微信／支付宝 CSV）：文件状态标记为 \texttt{failed}，错误信息写入 \texttt{error\_message}，页面提示用户重新上传。 \\
+\textbf{异常流程} & 文件格式无法识别：系统停止本次导入，页面说明失败原因并提示用户重新上传。 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -262,19 +262,18 @@ NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部
 \hline
 \textbf{触发条件} & 用户进入分类校正工作台 \\
 \hline
-\textbf{前置条件} & 系统中存在 \texttt{needs\_review=true} 的交易记录 \\
+\textbf{前置条件} & 系统中存在低置信度或用户认为需要复核的交易记录 \\
 \hline
-\textbf{后置条件} & 目标交易的 \texttt{final\_category\_id} 已更新，\texttt{needs\_review} 置为 \texttt{false}，校正结果实时反映在 Dashboard 及报表数据中 \\
+\textbf{后置条件} & 目标交易的最终分类已更新，校正结果实时反映在看板、人格分析及报表数据中 \\
 \hline
 \textbf{基本流程} &
-1）前端加载待校正队列（\texttt{needs\_review=true}，按置信度升序排列）。\newline
+1）页面加载待校正队列，并优先展示置信度较低的交易。\newline
 2）用户选中一笔交易，右侧面板展示商户、金额、当前分类、置信度与模型推理理由。\newline
 3）用户从系统分类或自定义分类中选择正确类别，点击"确认校正"。\newline
-4）前端调用 \texttt{PATCH /api/transactions/\{id\}}，提交新的 \texttt{final\_category\_id}。\newline
-5）后端更新交易记录，将 \texttt{needs\_review} 置为 \texttt{false}。\newline
-6）前端从待校正队列移除该交易，自动加载下一笔。\\
+4）系统保存新的最终分类，并同步更新统计口径。\newline
+5）页面从待校正队列移除该交易，自动加载下一笔。\\
 \hline
-\textbf{替代流程} & 用户认为当前分类正确：直接点击"确认当前分类"，后端同样将 \texttt{needs\_review} 置为 \texttt{false}，\texttt{final\_category\_id} 保留原 \texttt{auto\_category\_id}。 \\
+\textbf{替代流程} & 用户认为当前分类正确：直接点击"确认当前分类"，系统保留建议分类并将其视为最终结果。 \\
 \hline
 \textbf{异常流程} & 所需自定义分类尚不存在：用户跳转至分类管理页面新增分类后，返回工作台重新操作。 \\
 \bottomrule
@@ -285,11 +284,12 @@ NFR-08 & 可扩展性 & P1 & 分类供应商、报表生成、异步任务与部
 
 核心业务活动图描述了从用户登录到报表生成的端到端流程。流程始于用户登录，接着上传账单文件，系统创建导入批次后进行解析和去重；成功解析的交易经过大模型语义初分，高置信度结果直接入库，低置信度交易进入人工复核队列；用户完成校正后，交易数据进入 Dashboard 聚合分析，随后流向消费人格与财务健康分析模块；在报表生成环节，系统根据是否选择家庭组织参数，分别生成个人 PDF 报表或家庭聚合 PDF 报表。
 
-\begin{figure}[!htbp]
+\begin{figure}[p]
   \centering
+  \vspace*{-1.5em}
   \includegraphics[
-    width=0.58\textwidth,
-    height=0.47\textheight,
+    width=0.96\textwidth,
+    height=0.82\textheight,
     keepaspectratio
   ]{核心业务活动图.png}
   \caption{核心业务活动图}

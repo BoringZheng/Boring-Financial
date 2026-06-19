@@ -1,0 +1,37 @@
+@startuml
+left to right direction
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam nodesep 44
+skinparam ranksep 36
+skinparam dpi 180
+hide circle
+
+class User {
+  +id: int
+  +username: str
+  +email: str?
+  +is_active: bool
+  +is_admin: bool
+}
+
+class Organization {
+  +id: int
+  +name: str
+  +plan: str?
+  +subscription_status: str?
+}
+
+class OrganizationMember {
+  +id: int
+  +role: str
+}
+
+User -- Organization
+User -- OrganizationMember
+Organization -- OrganizationMember
+
+@enduml

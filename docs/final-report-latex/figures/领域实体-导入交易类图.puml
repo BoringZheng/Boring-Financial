@@ -1,0 +1,44 @@
+@startuml
+left to right direction
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam nodesep 42
+skinparam ranksep 36
+skinparam dpi 180
+hide circle
+
+class ImportBatch {
+  +id: int
+  +status: str
+  +total_count: int
+  +processed_count: int
+  --
+  +progress_percent(): float
+}
+
+class UploadedFile {
+  +id: int
+  +filename: str
+  +platform: str?
+  +status: str
+}
+
+class Transaction {
+  +id: int
+  +occurred_at: datetime
+  +type: str
+  +amount: Decimal
+  +merchant: str?
+  +item: str?
+  +dedupe_hash: str
+  +needs_review: bool
+}
+
+ImportBatch -- UploadedFile
+ImportBatch -- Transaction
+UploadedFile -- Transaction
+
+@enduml

@@ -115,12 +115,12 @@
   \caption{安全机制汇总}
   \label{tab:security}\\
     \toprule
-    \textbf{安全风险} & \textbf{应对措施} & \textbf{实现位置} & \textbf{说明} \\
+    \textbf{安全风险} & \textbf{应对措施} & \textbf{覆盖层面} & \textbf{说明} \\
     \midrule
     \endfirsthead
     \multicolumn{4}{c}{\small 表~\thetable\quad 安全机制汇总（续）} \\
     \toprule
-    \textbf{安全风险} & \textbf{应对措施} & \textbf{实现位置} & \textbf{说明} \\
+    \textbf{安全风险} & \textbf{应对措施} & \textbf{覆盖层面} & \textbf{说明} \\
     \midrule
     \endhead
     \midrule
@@ -128,20 +128,20 @@
     \endfoot
     \bottomrule
     \endlastfoot
-    身份伪造 & 密码哈希（passlib pbkdf2\_sha256），JWT 双令牌（access + refresh） & \texttt{core/security.py} & 密码不存明文；access token 短期有效 \\
+    身份伪造 & 密码哈希与短期访问凭证 & 认证层 & 密码不存明文；登录凭证具有有效期 \\
     \hline
-    未授权访问 & Bearer Token 强制验证用户身份 & \texttt{api/dependencies.py} & FastAPI Depends 注入，每条请求自动解码 JWT \\
+    未授权访问 & 业务请求强制验证用户身份 & 接口入口 & 未登录或凭证无效的请求被拒绝 \\
     \hline
-    跨用户数据泄露 & 私有资源查询强制附加 user\_id 过滤 & 各 API 路由及服务层 & SQLAlchemy ORM 参数化查询自动转义 \\
+    跨用户数据泄露 & 私有资源查询强制按用户归属过滤 & 服务层与数据层 & 用户只能访问自己的交易、分类和报表 \\
     \hline
-    组织越权操作 & RBAC 角色模型（owner/admin/member） & \texttt{services/organizations.py} & owner 可管理成员与角色，member 仅可查看 \\
+    组织越权操作 & 家庭组织角色权限控制 & 组织管理模块 & 所有者和管理员可管理成员，普通成员仅查看 \\
     \hline
-    SQL 注入 & SQLAlchemy ORM 参数化查询 & \texttt{models/entities.py} & 不存在字符串拼接 SQL 的场景 \\
+    SQL 注入 & 参数化查询与统一数据访问 & 数据访问层 & 避免通过字符串拼接构造查询 \\
     \hline
-    恶意文件上传 & 文件大小限制、扩展名白名单（CSV/XLSX） & \texttt{routes\_imports.py} & 后端验证文件类型 \\
+    恶意文件上传 & 文件大小限制、扩展名白名单 & 导入模块 & 只接受受支持账单格式 \\
     \hline
-    模型隐私 & 商户名称与商品摘要可能被发送至外部 API & \texttt{services/classifiers.py} & 已识别为风险点；缓解措施含本地模型选项 \\
+    模型隐私 & 可切换外部模型、本地模型或规则兜底 & 分类模块 & 已识别外部调用风险，并保留本地化方案 \\
 \end{longtable}
 \endgroup
 
-安全模块通过 FastAPI 的 \texttt{Depends} 机制将认证逻辑与业务代码解耦：\texttt{get\_current\_user} 从请求头提取并验证 JWT，\texttt{require\_admin} 在此基础上进一步校验管理员身份。此设计使安全策略变更不影响业务逻辑。
+安全模块将身份校验、管理员校验和资源归属检查从具体业务流程中抽离，作为统一的横切能力复用。此设计使安全策略变更不影响账单导入、分类校正和报表生成等核心业务逻辑。
