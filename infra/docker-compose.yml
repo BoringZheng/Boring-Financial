@@ -25,6 +25,7 @@ services:
       dockerfile: backend/Dockerfile
     restart: unless-stopped
     environment:
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in infra/.env}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-boring_financial}
       REDIS_URL: redis://redis:6379/0
       CLASSIFICATION_PROVIDER: ${CLASSIFICATION_PROVIDER:-composite}
@@ -51,6 +52,7 @@ services:
     command: celery -A backend.core.celery_app.celery_app worker -l info
     restart: unless-stopped
     environment:
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in infra/.env}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-boring_financial}
       REDIS_URL: redis://redis:6379/0
       OPENAI_API_BASE: ${OPENAI_API_BASE:-https://api.openai.com/v1}
